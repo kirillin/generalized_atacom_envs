@@ -1,0 +1,12 @@
+numpy
+pybullet
+torch
+tqdm
+scipy
+tensorboard
+pyrender
+trimesh
+smplx
+mushroom-rl==1.9.1
+experiment-launcher
+pin
