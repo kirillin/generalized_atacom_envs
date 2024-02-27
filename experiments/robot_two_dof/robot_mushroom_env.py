@@ -21,7 +21,7 @@ class RobotEnv(PyBullet):
                  collide_termination=False,
                  gamma=0.99, horizon=500, timestep=1/240., n_intermediate_steps=4,
                  debug_gui=False):
-
+        self.debug_gui = debug_gui
         self.init_state = init_state
         self.self_collision = self_collision
         self.collide_termination = collide_termination
@@ -73,16 +73,12 @@ class RobotEnv(PyBullet):
                                                         basePosition=[0,0,0])
         return {"target": self.target_pb_id}
 
-    # def reset_target(self, target_pos):
-    #     self.target_pos = target_pos.copy()
-    #     self._client.resetBasePositionAndOrientation(self.target_pb_id, self.target_pos, [0., 0., 0., 1.])
-
     def add_models(self):
         model_files = dict()
 
         # add model of walls
-        wall_file = env_dir + '/models/wall.urdf'
-        model_files[wall_file] = dict(useFixedBase=True, basePosition=[-1.5, -1.5, 0.],baseOrientation=[0., 0., 0., 1.])
+        # wall_file = env_dir + '/models/wall.urdf'
+        # model_files[wall_file] = dict(useFixedBase=True, basePosition=[-1.5, -1.5, 0.],baseOrientation=[0., 0., 0., 1.])
 
         return model_files
 
@@ -108,7 +104,7 @@ class RobotEnv(PyBullet):
         for name in ['link_1', 'link_2', 'wall_1', 'wall_2']:
             self.client.setCollisionFilterGroupMask(*self._indexer.link_map[name],
                                                     collisionFilterGroup=int('00000001', 2),
-                                                    collisionFilterMask=int('11111111', 2))
+                                                    collisionFilterMask=int('11111110', 2))
             
     def construct_act_obs_spec(self):
         actuation_spec = list()
@@ -132,8 +128,22 @@ class RobotEnv(PyBullet):
 
     def setup(self, state=None):
         """ executes the setup code after an environment reset """
-        self.target_pos = np.random.uniform([-2,-2, 1], [2,2,1])
-        self._client.resetBasePositionAndOrientation(self.target_pb_id, self.target_pos, [0., 0., 0., 1.])
+        x, y, z = np.random.uniform([-2,-2, 1], [2,2,1])
+        radius = 2.0 # hardcoded, the robot length
+
+        distance_to_point = np.sqrt(x**2 + y**2)
+        
+        if distance_to_point > radius:
+            k = radius / distance_to_point
+            projected_x = x * k
+            projected_y = y * k
+            x, y = projected_x, projected_y
+        
+        self.target_pos = [x, y, z]
+
+
+        if self.debug_gui:
+            self._client.resetBasePositionAndOrientation(self.target_pb_id, self.target_pos, [0., 0., 0., 1.])
 
         self.kinematics_pos = np.zeros(self.kinematics.model.nq)
 
@@ -150,7 +160,8 @@ class RobotEnv(PyBullet):
                                               controlMode=self.client.POSITION_CONTROL,
                                               targetPosition=self.kinematics_pos[j])
         
-        self.client.resetDebugVisualizerCamera(3.1, 90, -91, (0,0,0))
+        if self.debug_gui:
+            self.client.resetDebugVisualizerCamera(3.1, 90, -91, (0,0,0))
         super(RobotEnv, self).setup(state)
 
     def reward(self, state, action, next_state, absorbing):
@@ -170,7 +181,8 @@ class RobotEnv(PyBullet):
         goal = np.linalg.norm(self.tcp_pose.translation - self.target_pos)
 
         # visualize closure
-        self._client.changeVisualShape(self.target_pb_id, -1, rgbaColor=[np.sin(abs(goal)/2), np.cos(abs(goal)/2), 0, 0.5])
+        if self.debug_gui:
+            self._client.changeVisualShape(self.target_pb_id, -1, rgbaColor=[np.sin(abs(goal)/2), np.cos(abs(goal)/2), 0, 0.5])
 
         reward = -goal + 2
         if goal < 0.05:
@@ -188,8 +200,14 @@ class RobotEnv(PyBullet):
 
     def is_absorbing(self, state):
         """ Check whether the given state is an absorbing state or not """
-        if self._in_collision():
+        # if self._in_collision():
+        #     return True
+        if abs(state[0]) >= 3.14:
+            return True            
+        
+        if abs(state[1]) >= 3.14:
             return True
+
         return False
 
     def get_joint_states(self):
@@ -212,12 +230,13 @@ class RobotEnv(PyBullet):
         return ctrl_action
 
     def _in_collision(self):
-        robot_id = self._indexer.model_map['two_dof']
-        wall_id = self._indexer.model_map['wall']
-        if len(self.client.getContactPoints(robot_id, wall_id)):
-            return True
-        else:
-            return False
+        # robot_id = self._indexer.model_map['two_dof']
+        # wall_id = self._indexer.model_map['wall']
+        # if len(self.client.getContactPoints(robot_id, wall_id)):
+        #     return True
+        # else:
+        #     return False
+        return False
 
     def capture_key_frame(self):
         view_mat = self.client.computeViewMatrixFromYawPitchRoll([0.3, -0.3, 0.6], 1.5, 150, -40, 0., 2)
