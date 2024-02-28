@@ -29,7 +29,7 @@ class OneDof(PyBullet):
 
         # create pybullet env
         model_files = dict()
-        model_files[robot_file] = dict(basePosition=[0., 0., 1.],
+        model_files[robot_file] = dict(basePosition=[0., 0., 1.5],
                                        baseOrientation=[0., 0., 0., 1.])
         self.pybullet_data_path = pybullet_data.getDataPath()
         plane_file = os.path.join(self.pybullet_data_path, "plane.urdf")
@@ -60,6 +60,7 @@ class OneDof(PyBullet):
         self.episode_steps = list()
         self.key_frame_list = list()
         self.step_action_function = None
+        self.target_theta = 0
 
     def _custom_load_models(self):
         """add target pose marker"""
@@ -106,12 +107,15 @@ class OneDof(PyBullet):
         """ executes the setup code after an environment reset """
 
         # generate new target point
+        # y-z plane robot
+        # for theta = 0 robot concine with z-axis
         theta = np.random.uniform(-3.14, 3.14)
-        self.target_pos = [np.cos(theta), np.sin(theta), 1.]
+        self.target_theta = theta
+        self.target_pos = [0, np.cos(theta+np.pi/2), np.sin(theta+np.pi/2)+1.5]
 
         if self.debug_gui:
             self._client.resetBasePositionAndOrientation(self.target_pb_id, self.target_pos, [0., 0., 0., 1.])
-
+        
         self.kinematics_pos = np.zeros(self.kinematics.model.nq)
 
         if state is not None:
@@ -129,34 +133,40 @@ class OneDof(PyBullet):
                                               targetPosition=self.kinematics_pos[j])
         
         if self.debug_gui:
-            self.client.resetDebugVisualizerCamera(3.1, 90, -91, (0,0,0))
+            # self.client.resetDebugVisualizerCamera(3.1, 90, -91, (0,0,0))
+            self.client.resetDebugVisualizerCamera(2, 90, 0, (0,0,1))
 
         super(OneDof, self).setup(state)
 
     def reward(self, state, action, next_state, absorbing):
 
-        for index in self.kinematics_update_idx:
-            self.kinematics_pos[index[0]] = state[index[1]]
+        # for index in self.kinematics_update_idx:
+        #     self.kinematics_pos[index[0]] = state[index[1]]
         
-        self.kinematics.forward(self.kinematics_pos)
-        tcp_frame_id = self.kinematics.model.getFrameId("joint_tcp")
-        self.tcp_pose = self.kinematics.get_frame(tcp_frame_id)
-        goal = np.linalg.norm(self.tcp_pose.translation - self.target_pos)
+        # self.kinematics.forward(self.kinematics_pos)
+        # tcp_frame_id = self.kinematics.model.getFrameId("joint_tcp")
+        # self.tcp_pose = self.kinematics.get_frame(tcp_frame_id)
+        # goal = np.linalg.norm(self.tcp_pose.translation - self.target_pos)
+
+        goal = abs(self.target_theta - state[0])
+        reward = - goal / 0.3
+        if abs(goal) < 0.05:
+            reward += 10.0
 
         # visualize closure
         if self.debug_gui:
             self._client.changeVisualShape(self.target_pb_id, -1, rgbaColor=[np.sin(abs(goal)/2), np.cos(abs(goal)/2), 0, 0.5])
 
-        reward = -goal + 2
-
-        if goal < 0.05:
-            reward += 15.0
-
+        # print(reward)
 
         return reward
 
     def is_absorbing(self, state):
         """ Check whether the given state is an absorbing state or not """
+
+        if abs(state[0]) >= 3.14:
+            return True
+        
         return False
 
     def get_joint_states(self):
@@ -182,13 +192,23 @@ class OneDof(PyBullet):
 
 
 def test_env():
+    import time
     mdp = OneDof(debug_gui=True)
     
     mdp.reset()
-    for i in range(10000):
-        res = mdp.step([np.cos(i/100)])
+    
+    u = 0
+    q_des = 1.5
+    t = time.time()
+    while True:
+        res = mdp.step([u])
         q, dq = res[0][:2]
-        print(q, dq)
+        print(f"{time.time() - t}\t{q}\t{dq}\t{u}\n")
+        u = 10 * (q_des - q) - 2  * dq
+
+        if time.time() - t > 3.0:
+            q_des = -q_des
+            t = time.time()
 
 
 if __name__ == '__main__':

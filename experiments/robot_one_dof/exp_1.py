@@ -77,7 +77,7 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
     # MDP
     horizon = 200
     gamma = 0.99
-    mdp = OneDof(debug_gui=False)
+    mdp = OneDof(debug_gui=True)
 
     # Settings
     initial_replay_size = 64
