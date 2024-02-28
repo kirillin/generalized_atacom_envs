@@ -4,6 +4,8 @@ import pybullet
 import pybullet_data
 
 from mushroom_rl.environments.pybullet import PyBullet, PyBulletObservationType
+from mushroom_rl.utils.angles import normalize_angle
+from mushroom_rl.rl_utils.spaces import Box
 
 import os
 env_dir = os.path.dirname(__file__)
@@ -13,13 +15,13 @@ from robot_kinematics import Kinematics
 
 class OneDof(PyBullet):
 
-    
     def __init__(self, 
                  robot_file=env_dir + "/models/one_dof.urdf",
                  init_state=None,
                  gamma=0.99, horizon=500, timestep=1/240., n_intermediate_steps=4,
                  debug_gui=True):
-        
+
+        np.random.seed()
         self.debug_gui = debug_gui
         self.init_state = init_state
 
@@ -61,6 +63,16 @@ class OneDof(PyBullet):
         self.key_frame_list = list()
         self.step_action_function = None
         self.target_theta = 0
+        self.steps_to_target = 0
+
+    def set_target(self, target):
+        self.target_theta = target
+
+    def _modify_mdp_info(self, mdp_info):
+        observation_high = np.array([3.14, 1.0, 1, 1, 1, 1, 1, 1, 1])
+        observation_low = -observation_high
+        mdp_info.observation_space = Box(observation_low, observation_high)
+        return mdp_info
 
     def _custom_load_models(self):
         """add target pose marker"""
@@ -101,21 +113,24 @@ class OneDof(PyBullet):
 
     def reset(self, state=None):
         observation = super().reset(state)
+        self.steps_to_target = 0
+        self.steps = 0
         return observation
 
     def setup(self, state=None):
         """ executes the setup code after an environment reset """
 
-        # generate new target point
-        # y-z plane robot
-        # for theta = 0 robot concine with z-axis
+        # # generate new target point
+        # # y-z plane robot
+        # # for theta = 0 robot concine with z-axis
         theta = np.random.uniform(-3.14, 3.14)
         self.target_theta = theta
+        # theta = self.target_theta
         self.target_pos = [0, np.cos(theta+np.pi/2), np.sin(theta+np.pi/2)+1.5]
 
         if self.debug_gui:
             self._client.resetBasePositionAndOrientation(self.target_pb_id, self.target_pos, [0., 0., 0., 1.])
-        
+
         self.kinematics_pos = np.zeros(self.kinematics.model.nq)
 
         if state is not None:
@@ -131,7 +146,7 @@ class OneDof(PyBullet):
             self.client.setJointMotorControl2(*self._indexer.joint_map[joint_name],
                                               controlMode=self.client.POSITION_CONTROL,
                                               targetPosition=self.kinematics_pos[j])
-        
+
         if self.debug_gui:
             # self.client.resetDebugVisualizerCamera(3.1, 90, -91, (0,0,0))
             self.client.resetDebugVisualizerCamera(2, 90, 0, (0,0,1))
@@ -139,34 +154,33 @@ class OneDof(PyBullet):
         super(OneDof, self).setup(state)
 
     def reward(self, state, action, next_state, absorbing):
+        self.steps += 1
 
-        # for index in self.kinematics_update_idx:
-        #     self.kinematics_pos[index[0]] = state[index[1]]
-        
-        # self.kinematics.forward(self.kinematics_pos)
-        # tcp_frame_id = self.kinematics.model.getFrameId("joint_tcp")
-        # self.tcp_pose = self.kinematics.get_frame(tcp_frame_id)
-        # goal = np.linalg.norm(self.tcp_pose.translation - self.target_pos)
+        q, dq = state[:2]
+        goal = np.abs(self.target_theta - q)
 
-        goal = abs(self.target_theta - state[0])
-        reward = - goal / 0.3
-        if abs(goal) < 0.05:
+        reward = - goal**2 - 0.1 * dq**2 - 0.001 * action[0]**2
+
+        if goal < 0.05:
+            self.steps_to_target += 1
             reward += 10.0
 
         # visualize closure
         if self.debug_gui:
             self._client.changeVisualShape(self.target_pb_id, -1, rgbaColor=[np.sin(abs(goal)/2), np.cos(abs(goal)/2), 0, 0.5])
 
-        # print(reward)
-
         return reward
 
     def is_absorbing(self, state):
         """ Check whether the given state is an absorbing state or not """
-
-        if abs(state[0]) >= 3.14:
+        if self.steps_to_target >= 1:
             return True
-        
+        if self.steps > 500:
+            return True
+
+        # if abs(state[0]) >= 3.14:
+        #     return True
+
         return False
 
     def get_joint_states(self):
@@ -203,7 +217,8 @@ def test_env():
     while True:
         res = mdp.step([u])
         q, dq = res[0][:2]
-        print(f"{time.time() - t}\t{q}\t{dq}\t{u}\n")
+        # print(f"{time.time() - t}\t{q}\t{dq}\t{u}\n")
+        print(mdp._mdp_info.observation_space.low)
         u = 10 * (q_des - q) - 2  * dq
 
         if time.time() - t > 3.0:
@@ -213,4 +228,3 @@ def test_env():
 
 if __name__ == '__main__':
     test_env()
-    
