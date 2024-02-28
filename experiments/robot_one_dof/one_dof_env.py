@@ -1,0 +1,196 @@
+import numpy as np
+
+import pybullet
+import pybullet_data
+
+from mushroom_rl.environments.pybullet import PyBullet, PyBulletObservationType
+
+import os
+env_dir = os.path.dirname(__file__)
+
+from robot_kinematics import Kinematics
+
+
+class OneDof(PyBullet):
+
+    
+    def __init__(self, 
+                 robot_file=env_dir + "/models/one_dof.urdf",
+                 init_state=None,
+                 gamma=0.99, horizon=500, timestep=1/240., n_intermediate_steps=4,
+                 debug_gui=True):
+        
+        self.debug_gui = debug_gui
+        self.init_state = init_state
+
+        # add robot kinematics
+        self.kinematics = Kinematics(robot_file)
+        self.kinematics_pos = np.zeros(self.kinematics.model.nq)
+
+        # create pybullet env
+        model_files = dict()
+        model_files[robot_file] = dict(basePosition=[0., 0., 1.],
+                                       baseOrientation=[0., 0., 0., 1.])
+        self.pybullet_data_path = pybullet_data.getDataPath()
+        plane_file = os.path.join(self.pybullet_data_path, "plane.urdf")
+        model_files[plane_file] = dict(useFixedBase=True, basePosition=[0.0, 0.0, 0.0],
+                                       baseOrientation=[0, 0, 0, 1])
+
+        # add control and observation
+        self.control_flags = {'mode': pybullet.VELOCITY_CONTROL}
+        actuation_spec, observation_spec = self.construct_act_obs_spec()
+
+        # initilize mushroom rl pybullet env
+        super().__init__(model_files, 
+                        actuation_spec, 
+                        observation_spec, 
+                        gamma,
+                        horizon, 
+                        timestep, n_intermediate_steps,
+                        debug_gui=debug_gui, size=(500, 500), distance=1.8)
+
+        self.one_dof = self._indexer.model_map['one_dof']       
+
+        self.init_post_process()
+
+        self.target_pos = np.zeros(3)
+        self.count_collide = 0
+        self.count_joint_constraint = 0
+        self.step_counter = 0
+        self.episode_steps = list()
+        self.key_frame_list = list()
+        self.step_action_function = None
+
+    def _custom_load_models(self):
+        """add target pose marker"""
+        vis_shape = self.client.createVisualShape(self.client.GEOM_SPHERE, radius=0.1, rgbaColor=[1., 0., 0., 0.5])
+        self.target_pb_id = self.client.createMultiBody(baseVisualShapeIndex=vis_shape,
+                                                        basePosition=[0,0,0])
+        return {"target": self.target_pb_id}
+
+    def init_post_process(self):
+        """joint info """
+        self.joint_names = list()
+        self.kinematics_update_idx = list()
+
+        for j, joint_name in enumerate(self.kinematics.model.names[1:]):
+            self.joint_names.append(joint_name)
+            if joint_name in self._indexer.observation_indices_map.keys():
+                self.kinematics_update_idx.append(
+                    (j, self._indexer.observation_indices_map[joint_name][PyBulletObservationType.JOINT_POS][0])
+                )
+
+    def construct_act_obs_spec(self):
+        """
+            action
+                dq \in R^1
+            observation
+                [q, dq] \in R^2
+        """
+        actuation_spec = list()
+        observation_pos_spec = list()
+        observation_vel_spec = list()
+
+        actuation_spec.append(("joint_1", self.control_flags['mode']))
+        observation_pos_spec.append(("joint_1", PyBulletObservationType.JOINT_POS))
+        observation_vel_spec.append(("joint_1", PyBulletObservationType.JOINT_VEL))
+        observation_vel_spec.append(("target", PyBulletObservationType.BODY_POS))
+
+        return actuation_spec, observation_pos_spec + observation_vel_spec
+
+    def reset(self, state=None):
+        observation = super().reset(state)
+        return observation
+
+    def setup(self, state=None):
+        """ executes the setup code after an environment reset """
+
+        # generate new target point
+        theta = np.random.uniform(-3.14, 3.14)
+        self.target_pos = [np.cos(theta), np.sin(theta), 1.]
+
+        if self.debug_gui:
+            self._client.resetBasePositionAndOrientation(self.target_pb_id, self.target_pos, [0., 0., 0., 1.])
+
+        self.kinematics_pos = np.zeros(self.kinematics.model.nq)
+
+        if state is not None:
+            for j, joint_name in enumerate(self.joint_names):
+                self.kinematics_pos[j] = state[j]
+        elif self.init_state is not None:
+            for j, joint_name in enumerate(self.joint_names):
+                self.kinematics_pos[j] = self.init_state[j]
+
+        # set initial state in pybullet position_control mode
+        for j, joint_name in enumerate(self.joint_names):
+            self.client.resetJointState(*self._indexer.joint_map[joint_name], self.kinematics_pos[j])
+            self.client.setJointMotorControl2(*self._indexer.joint_map[joint_name],
+                                              controlMode=self.client.POSITION_CONTROL,
+                                              targetPosition=self.kinematics_pos[j])
+        
+        if self.debug_gui:
+            self.client.resetDebugVisualizerCamera(3.1, 90, -91, (0,0,0))
+
+        super(OneDof, self).setup(state)
+
+    def reward(self, state, action, next_state, absorbing):
+
+        for index in self.kinematics_update_idx:
+            self.kinematics_pos[index[0]] = state[index[1]]
+        
+        self.kinematics.forward(self.kinematics_pos)
+        tcp_frame_id = self.kinematics.model.getFrameId("joint_tcp")
+        self.tcp_pose = self.kinematics.get_frame(tcp_frame_id)
+        goal = np.linalg.norm(self.tcp_pose.translation - self.target_pos)
+
+        # visualize closure
+        if self.debug_gui:
+            self._client.changeVisualShape(self.target_pb_id, -1, rgbaColor=[np.sin(abs(goal)/2), np.cos(abs(goal)/2), 0, 0.5])
+
+        reward = -goal + 2
+
+        if goal < 0.05:
+            reward += 15.0
+
+
+        return reward
+
+    def is_absorbing(self, state):
+        """ Check whether the given state is an absorbing state or not """
+        return False
+
+    def get_joint_states(self):
+        result = list()
+        for joint in self.joint_names:
+            result.append(self.client.getJointState(self.robot, self._indexer.joint_map[joint][1])[0])
+        return result
+
+    def capture_key_frame(self):
+        view_mat = self.client.computeViewMatrixFromYawPitchRoll([0.3, -0.3, 0.6], 1.5, 150, -40, 0., 2)
+        proj_mat = self.client.computeProjectionMatrixFOV(90, 1, 0.1, 20)
+        img = self.client.getCameraImage(800, 800, view_mat, proj_mat)
+        self.key_frame_list.append(img[2])
+
+    def reset_log_info(self):
+        self.count_collide = 0
+        self.count_joint_constraint = 0
+        self.episode_steps = list()
+        self.key_frame_list = list()
+
+    def get_log_info(self):
+        return self.count_collide, self.count_joint_constraint, np.mean(self.episode_steps)
+
+
+def test_env():
+    mdp = OneDof(debug_gui=True)
+    
+    mdp.reset()
+    for i in range(10000):
+        res = mdp.step([np.cos(i/100)])
+        q, dq = res[0][:2]
+        print(q, dq)
+
+
+if __name__ == '__main__':
+    test_env()
+    
