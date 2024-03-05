@@ -34,6 +34,9 @@ class OneDof(Environment):
         horizon = 300
         mdp_info = MDPInfo(observation_space, action_space, gamma, horizon, dt)
 
+        # target
+        self.target_theta = 0
+
         # Visualization
         self._viewer = Viewer(5 * self._r, 5 * self._r)
         self._last_x = 0
@@ -54,7 +57,12 @@ class OneDof(Environment):
 
         self._last_x = 0
 
-        return self._state
+        return self._state, {}
+
+    def setup(self, state=None):
+        """ executes the setup code after an environment reset """
+        self.target_theta = np.random.uniform(-3.14, 3.14)
+        super(OneDof, self).setup(state)
 
     def step(self, action):
         u = self._bound(action[0], -self._max_u, self._max_u)
@@ -63,18 +71,22 @@ class OneDof(Environment):
         self._state = np.array(new_state[-1])
         self._state[0] = normalize_angle(self._state[0])
 
-        if abs(self._state[0]) > np.pi / 2:
-            absorbing = True
-            reward = -10000
-        else:
+        abserror = np.abs(self.target_theta - self._state[0])
+
+        if abserror > 0.01:
             absorbing = False
-            Q = np.diag([3.0, 0.1])
 
+            # # option 1 -- simple reward by angle
+            # reward = -abserror
+
+            # option 2 -- reward by state vector
             x = self._state
+            Q = np.diag([3.0, 0.1])
+            reward = - x.dot(Q).dot(x)
 
-            J = x.dot(Q).dot(x)
-
-            reward = -J
+        else:
+            absorbing = True
+            reward = 10
 
         return self._state, reward, absorbing, {}
 
