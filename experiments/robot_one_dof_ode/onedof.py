@@ -36,6 +36,7 @@ class OneDof(Environment):
 
         # target
         self.target_theta = 0
+        self.target_point = np.array([1, 0])
 
         # Visualization
         self._viewer = Viewer(5 * self._r, 5 * self._r)
@@ -58,6 +59,7 @@ class OneDof(Environment):
         self._last_x = 0
 
         self.target_theta = normalize_angle(np.random.uniform(-3.14, 3.14))
+        self.target_point = self.fk(self.target_theta)
 
         return self._state, {}
 
@@ -81,10 +83,14 @@ class OneDof(Environment):
             # # option 1 -- simple reward by angle
             # reward = -abserror
 
-            # option 2 -- reward by state vector
-            x = self._state
-            Q = np.diag([3.0, 0.1])
-            reward = - x.dot(Q).dot(x)
+            # # option 2 -- reward by state vector
+            # x = self._state
+            # Q = np.diag([3.0, 0.1])
+            # reward = - x.dot(Q).dot(x)
+
+            # option 3 -- reward for cartesian space point attraction
+            error = np.linalg.norm(self.target_point - self.fk(self._state[0]))
+            reward = -error
 
         else:
             absorbing = False
