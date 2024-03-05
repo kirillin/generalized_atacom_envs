@@ -57,6 +57,8 @@ class OneDof(Environment):
 
         self._last_x = 0
 
+        self.target_theta = normalize_angle(np.random.uniform(-3.14, 3.14))
+
         return self._state, {}
 
     def setup(self, state=None):
@@ -85,7 +87,7 @@ class OneDof(Environment):
             reward = - x.dot(Q).dot(x)
 
         else:
-            absorbing = True
+            absorbing = False
             reward = 10
 
         return self._state, reward, absorbing, {}
@@ -111,11 +113,15 @@ class OneDof(Environment):
     def render(self, record=False):
         start = 2.5 * self._r * np.ones(2)
         end = 2.5 * self._r * np.ones(2)
+        end_target = 2.5 * self._r * np.ones(2)
 
         end[0] += 2 * self._r * np.cos(self._state[0])
         end[1] += 2 * self._r * np.sin(self._state[0])
+        self._viewer.line(start, end, color=(255, 255, 255), width=1)
 
-        self._viewer.line(start, end)
+        end_target[0] += 2 * self._r * np.cos(self.target_theta)
+        end_target[1] += 2 * self._r * np.sin(self.target_theta)
+        self._viewer.line(start, end_target, color=(0, 255, 0), width=1)
 
         frame = self._viewer.get_frame() if record else None
 

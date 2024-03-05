@@ -134,7 +134,7 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
 
     for n in trange(n_epochs, leave=False):
         core.learn(n_steps=n_steps, n_steps_per_fit=1)
-        dataset = core.evaluate(n_steps=n_steps_test, render=False)
+        dataset = core.evaluate(n_steps=n_steps_test, render=True)
 
         J = np.mean(dataset.discounted_return)
         R = np.mean(dataset.undiscounted_return)
@@ -154,4 +154,4 @@ if __name__ == '__main__':
     save = False
     load = False
     TorchUtils.set_default_device('cpu')
-    experiment(alg=SAC, n_epochs=40, n_steps=1000, n_steps_test=2000, save=save, load=load)
+    experiment(alg=SAC, n_epochs=13, n_steps=500, n_steps_test=500, save=save, load=load)
