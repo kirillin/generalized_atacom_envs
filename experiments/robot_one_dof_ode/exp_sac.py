@@ -75,7 +75,7 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
     logger.info('Experiment Algorithm: ' + alg.__name__)
 
     # MDP
-    mdp = OneDof()
+    mdp = OneDof(is_closedloop=True)
 
     # Settings
     initial_replay_size = 64

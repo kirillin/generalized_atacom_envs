@@ -12,7 +12,9 @@ class OneDof(Environment):
         tau = m ddq + c dq + m g r cos(q)
     """
     
-    def __init__(self, random_start=False):
+    def __init__(self, random_start=False, is_closedloop=False):
+        self.is_closedloop = is_closedloop
+
         # MDP parameters
         gamma = 0.97
 
@@ -89,8 +91,8 @@ class OneDof(Environment):
             # reward = - x.dot(Q).dot(x)
 
             # option 3 -- reward for cartesian space point attraction
-            error = np.linalg.norm(self.target_point - self.fk(self._state[0]))
-            reward = -error
+            error = normalize_angle(np.linalg.norm(self.target_point - self.fk(self._state[0])))
+            reward = -4 * error**2 - 0.1 * self._state[1]**2 - 0.01 * action**2
 
         else:
             absorbing = False
@@ -102,7 +104,7 @@ class OneDof(Environment):
         theta, dtheta = x[0], x[1]
         return np.array([
             dtheta,
-            -self._c / self._m * dtheta - self._g * self._r * np.cos(theta)
+            0 # -self._c / self._m * dtheta - self._g * self._r * np.cos(theta)
         ])
 
     def _G(self, x):
@@ -113,8 +115,18 @@ class OneDof(Environment):
 
     def _dynamics(self, state, t, u):
         x = np.array([state[0], state[1]])
-        dxdt = self._f(x) + self._G(x) * u
+        tau = u
+        if self.is_closedloop:
+           tau = self._pd_control(state, t, u)
+        dxdt = self._f(x) + self._G(x) * tau
         return dxdt.tolist()
+
+    def _pd_control(self, state, t, u):
+        """desired angle control"""
+        x = np.array([state[0], state[1]])
+        k = 10.
+        b = 2  * np.sqrt(self._m * k)
+        return k * (u - x[0]) - b * x[1]
 
     def render(self, record=False):
         start = 2.5 * self._r * np.ones(2)
