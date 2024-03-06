@@ -31,8 +31,8 @@ class OneDof(Environment):
         # MDP properties
         dt = 1e-2
         observation_space = spaces.Box(low=-high, high=high)
-        action_space = spaces.Box(low=np.array([-self._max_u]),
-                                  high=np.array([self._max_u]))
+        action_space = spaces.Box(low=np.array([-self._max_u]*32),
+                                  high=np.array([self._max_u]*32))
         horizon = 300
         mdp_info = MDPInfo(observation_space, action_space, gamma, horizon, dt)
 
@@ -92,7 +92,7 @@ class OneDof(Environment):
 
             # option 3 -- reward for cartesian space point attraction
             error = normalize_angle(np.linalg.norm(self.target_point - self.fk(self._state[0])))
-            reward = -4 * error**2 - 0.1 * self._state[1]**2 - 0.01 * action**2
+            reward = -4 * error**2 - 0.1 * self._state[1]**2 - 0.01 * action[0]**2
 
         else:
             absorbing = False
