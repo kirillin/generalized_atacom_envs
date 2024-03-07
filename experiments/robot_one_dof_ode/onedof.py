@@ -12,7 +12,7 @@ class OneDof(Environment):
         tau = m ddq + c dq + m g r cos(q)
     """
     
-    def __init__(self, random_start=False, is_closedloop=False):
+    def __init__(self, random_start=False, random_target=False, is_closedloop=False):
         self.is_closedloop = is_closedloop
 
         # MDP parameters
@@ -25,20 +25,22 @@ class OneDof(Environment):
         self._max_u = 20
 
         self._random = random_start
+        self._random_target = random_target
 
-        high = np.array([np.pi, np.pi])   # limits for state q, dq
+        high = np.array([1, 1])   # limits for state q, dq
 
         # MDP properties
         dt = 1e-2
         observation_space = spaces.Box(low=-high, high=high)
-        action_space = spaces.Box(low=np.array([-self._max_u]*32),
-                                  high=np.array([self._max_u]*32))
+        action_space = spaces.Box(low=np.array([-self._max_u]),
+                                  high=np.array([self._max_u]))
         horizon = 300
         mdp_info = MDPInfo(observation_space, action_space, gamma, horizon, dt)
 
         # target
         self.target_theta = 0
         self.target_point = np.array([1, 0])
+        self.current_theta = 0
 
         # Visualization
         self._viewer = Viewer(5 * self._r, 5 * self._r)
@@ -53,21 +55,26 @@ class OneDof(Environment):
             else:
                 angle = -np.pi/8
 
-            self._state = np.array([angle, 0.])
+            # self._state = np.array([angle, 0.])
+            self._state = np.array([np.cos(angle), np.sin(angle)])
         else:
             self._state = state
             self._state[0] = normalize_angle(self._state[0])
 
         self._last_x = 0
 
-        self.target_theta = normalize_angle(np.random.uniform(-3.14, 3.14))
-        self.target_point = self.fk(self.target_theta)
+        if self._random_target:
+            self.target_theta = normalize_angle(np.random.uniform(-3.14, 3.14))
+            self.target_point = self.fk(self.target_theta)
+        else:
+            self.target_point = self.fk(3 * np.pi / 2)
 
         return self._state, {}
 
     def setup(self, state=None):
         """ executes the setup code after an environment reset """
-        self.target_theta = np.random.uniform(-3.14, 3.14)
+        self.target_theta = normalize_angle(np.random.uniform(-3.14, 3.14))
+        self.target_point = self.fk(self.target_theta)
         super(OneDof, self).setup(state)
 
     def step(self, action):
@@ -75,28 +82,27 @@ class OneDof(Environment):
         new_state = odeint(self._dynamics, self._state, [0, self.info.dt], (u,))
 
         self._state = np.array(new_state[-1])
-        self._state[0] = normalize_angle(self._state[0])
+        # self._state[0] = normalize_angle(self._state[0])
 
-        abserror = np.abs(self.target_theta - self._state[0])
+        error = np.norm(self.target_point - self._state)
+        reward = - error**2 - 0.01 * action[0]**2
 
-        if abserror > 0.01:
-            absorbing = False
+        # # option 1 -- simple reward by angle
+        # reward = -abserror
 
-            # # option 1 -- simple reward by angle
-            # reward = -abserror
+        # # option 2 -- reward by state vector
+        # x = self._state
+        # Q = np.diag([3.0, 0.1])
+        # reward = - x.dot(Q).dot(x)
 
-            # # option 2 -- reward by state vector
-            # x = self._state
-            # Q = np.diag([3.0, 0.1])
-            # reward = - x.dot(Q).dot(x)
+        # option 3 -- reward for cartesian space point attraction
+        # error = normalize_angle(np.linalg.norm(self.target_point - self.fk(self._state[0])))
+        # reward = - error**2 - 0.1 * self._state[1]**2 - 0.01 * action[0]**2
 
-            # option 3 -- reward for cartesian space point attraction
-            error = normalize_angle(np.linalg.norm(self.target_point - self.fk(self._state[0])))
-            reward = -4 * error**2 - 0.1 * self._state[1]**2 - 0.01 * action[0]**2
-
-        else:
-            absorbing = False
+        if error < 0.05:
             reward = 10
+        
+        absorbing = False
 
         return self._state, reward, absorbing, {}
 

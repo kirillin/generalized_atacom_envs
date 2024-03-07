@@ -9,7 +9,8 @@ from mushroom_rl.algorithms.actor_critic import SAC
 from mushroom_rl.core import Core, Logger
 from mushroom_rl.utils import TorchUtils
 
-from onedof import OneDof
+from onedof2 import OneDof
+
 
 from tqdm import trange
 
@@ -75,7 +76,7 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
     logger.info('Experiment Algorithm: ' + alg.__name__)
 
     # MDP
-    mdp = OneDof(is_closedloop=True)
+    mdp = OneDof()
 
     # Settings
     initial_replay_size = 64
@@ -154,4 +155,4 @@ if __name__ == '__main__':
     save = False
     load = False
     TorchUtils.set_default_device('cpu')
-    experiment(alg=SAC, n_epochs=13, n_steps=500, n_steps_test=500, save=save, load=load)
+    experiment(alg=SAC, n_epochs=100, n_steps=2000, n_steps_test=4000, save=save, load=load)
