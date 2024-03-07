@@ -5,7 +5,7 @@ from experiment_launcher import Launcher
 
 LOCAL = True
 TEST = False 
-USE_CUDA = False
+USE_CUDA = True
 
 PARTITION = 'deflt*'  # 'amd', 'rtx', 'deflt*' for lichtenberg
 GRES = 'gpu:rtx3080:1' if USE_CUDA else None  # gpu:rtx2080:1, gpu:rtx3080:1
@@ -40,28 +40,8 @@ launcher = Launcher(exp_name='experiments', python_file='experiment', project_na
                     )
 
 envs = {
-        # 'table': {'lr_alpha__': 1e-6, 'actor_lr__': 1e-5, 'critic_lr__': 1e-5},
-        # 'shelf': {'lr_alpha__': 1e-6, 'actor_lr__': 1e-5, 'critic_lr__': 1e-5},
-        # 'table_se': {'lr_alpha__': 1e-6, 'actor_lr__': 1e-5, 'critic_lr__': 1e-5},
-        # 'shelf_se': {'lr_alpha__': 1e-6, 'actor_lr__': 1e-5, 'critic_lr__': 1e-5},
-        # 'table_atacom': {'lr_alpha__': 1e-6, 'actor_lr__': 3e-4, 'critic_lr__': 3e-4},
-        # 'shelf_atacom': {'lr_alpha__': 1e-6, 'actor_lr__': 3e-4, 'critic_lr__': 3e-4},
-        # 'hri_atacom': {'n_features': '512-512-256'}
-        # 'shelf_real_atacom': {},
-        # 'nav_atacom': {'timestep': 1 / 30., 'n_intermediate_steps': 1, 'lr_alpha__': 1e-6, 'actor_lr__': 3e-4, 'critic_lr__': 3e-4},
-        # 'fetch_nav_atacom': {'timestep': 1 / 30., 'n_intermediate_steps': 1, 'lr_alpha__': 5e-6, 'actor_lr__': 5e-5, 'critic_lr__': 5e-5}
-        # 'table_se': {'lr_alpha__': 1e-5, 'actor_lr__': 3e-4, 'critic_lr__': 3e-4},
-        # 'shelf_real_se': {'lr_alpha__': 1e-5, 'actor_lr__': 3e-4, 'critic_lr__': 3e-4},
-        # 'nav_se': {'timestep': 1 / 30., 'n_intermediate_steps': 1}
-
-        # Linear Attractor
-        'two_dof': {},
-        # 'table_atacom': {},
-        # 'shelf': {},
-        # 'shelf_atacom': {},
-        # 'nav': {'timestep': 1 / 30., 'n_intermediate_steps': 1},
-        # 'nav_atacom': {'timestep': 1 / 30., 'n_intermediate_steps': 1}
-        }
+    'two_dof': {}
+    }
 
 algs = {
     'sac': {'n_steps_per_fit': 1},
@@ -75,12 +55,7 @@ algs = {
 }
 
 params_list = [
-    {'preprocessor': None}
-    # {'lr_alpha__': 1e-5, 'actor_lr__': 3e-4, 'critic_lr__': 3e-4},
-    # {'lr_alpha__': 1e-6, 'actor_lr__': 3e-4, 'critic_lr__': 3e-4},
-    # {'lr_alpha__': 1e-5, 'actor_lr__': 1e-5, 'critic_lr__': 1e-5},
-    # {'lr_alpha__': 1e-6, 'actor_lr__': 1e-5, 'critic_lr__': 1e-5},
-    # {'lr_alpha__': 5e-6, 'actor_lr__': 5e-5, 'critic_lr__': 5e-5},
+    {'lr_alpha__': 1e-5, 'actor_lr__': 3e-4, 'critic_lr__': 3e-4}
 ]
 
 for env in envs.keys():

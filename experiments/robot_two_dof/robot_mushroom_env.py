@@ -3,6 +3,7 @@ import numpy as np
 import pybullet
 import pybullet_data
 
+from mushroom_rl.utils.spaces import Box
 from mushroom_rl.environments.pybullet import PyBullet, PyBulletObservationType
 
 import os
@@ -15,17 +16,33 @@ class RobotEnv(PyBullet):
     """ Two dof robot (2R manipulator)"""
     
     def __init__(self, 
-                 robot_file=env_dir + "/models/two_dof.urdf",
-                 init_state=None,
-                 self_collision=False,
-                 collide_termination=False,
-                 gamma=0.99, horizon=500, timestep=1/240., n_intermediate_steps=4,
-                 debug_gui=False):
+        robot_file=env_dir + "/models/two_dof.urdf",
+        init_state=None,
+        self_collision=False,
+        collide_termination=False, control='velocity_position',
+        step_action_function = None,
+        gamma=0.99, horizon=500, timestep=1/240., n_intermediate_steps=4,
+        debug_gui=False
+    ):
         self.debug_gui = debug_gui
         self.init_state = init_state
+        
+        self.control_flags = {'velocity_position': False}
         self.self_collision = self_collision
+
+        if control == 'torque':
+            self.control_flags['mode'] = pybullet.TORQUE_CONTROL
+        elif control == 'position':
+            self.control_flags['mode'] = pybullet.POSITION_CONTROL
+        elif control == 'velocity':
+            self.control_flags['mode'] = pybullet.VELOCITY_CONTROL
+        elif control == 'velocity_position':
+            self.control_flags['mode'] = pybullet.POSITION_CONTROL
+            self.control_flags['velocity_position'] = True
+        else:
+            raise NotImplementedError
+
         self.collide_termination = collide_termination
-        self.control_flags = {'mode': pybullet.VELOCITY_CONTROL, 'velocity_position': False}
 
         self.kinematics = Kinematics(robot_file)
         self.kinematics_pos = np.zeros(self.kinematics.model.nq)
@@ -48,12 +65,13 @@ class RobotEnv(PyBullet):
 
         # initilize mushroom rl pybullet env
         super().__init__(model_files, 
-                        actuation_spec, 
-                        observation_spec, 
-                        gamma,
-                        horizon, 
-                        timestep, n_intermediate_steps,
-                        debug_gui=debug_gui, size=(500, 500), distance=1.8)
+            actuation_spec, 
+            observation_spec, 
+            gamma,
+            horizon, 
+            timestep, n_intermediate_steps,
+            debug_gui=debug_gui, size=(500, 500), distance=1.8
+        )
 
         self.robot = self._indexer.model_map['two_dof']       
 
@@ -65,7 +83,8 @@ class RobotEnv(PyBullet):
         self.step_counter = 0
         self.episode_steps = list()
         self.key_frame_list = list()
-        self.step_action_function = None
+        self.final_distance_list = list()
+        self.step_action_function = step_action_function
 
     def _custom_load_models(self):
         vis_shape = self.client.createVisualShape(self.client.GEOM_SPHERE, radius=0.1, rgbaColor=[1., 0., 0., 0.5])
@@ -96,12 +115,25 @@ class RobotEnv(PyBullet):
         if self.self_collision:
             self.collision_mask()
 
+    # Remove z,qx,qy,qz parts of target pose vector
+    def _modify_mdp_info(self, mdp_info):
+        super()._modify_mdp_info(mdp_info)
+        mdp_info.observation_space = Box(mdp_info.observation_space.low[:-5], mdp_info.observation_space.high[:-5])
+        if self.control_flags['velocity_position']:
+            mdp_info.action_space = Box(-2*np.ones(mdp_info.action_space.shape), 2*np.ones(mdp_info.action_space.shape))
+        return mdp_info
+    
+    # Remove z,qx,qy,qz parts of target pose vector
+    def _create_observation(self, state):
+        return state[:-5]
+    
+
     def collision_mask(self):
 
         for idx in range(self.client.getNumJoints(self.robot)):
             self.client.setCollisionFilterGroupMask(self.robot, idx, collisionFilterGroup=int('00000001', 2),
                                                     collisionFilterMask=int('11111000', 2))
-        for name in ['link_1', 'link_2', 'wall_1', 'wall_2']:
+        for name in ['link_1', 'link_2']:
             self.client.setCollisionFilterGroupMask(*self._indexer.link_map[name],
                                                     collisionFilterGroup=int('00000001', 2),
                                                     collisionFilterMask=int('11111110', 2))
@@ -115,8 +147,6 @@ class RobotEnv(PyBullet):
         actuation_spec.append(("joint_2", self.control_flags['mode']))
         observation_pos_spec.append(("joint_1", PyBulletObservationType.JOINT_POS))
         observation_pos_spec.append(("joint_2", PyBulletObservationType.JOINT_POS))
-        observation_vel_spec.append(("joint_1", PyBulletObservationType.JOINT_VEL))
-        observation_vel_spec.append(("joint_2", PyBulletObservationType.JOINT_VEL))
 
         observation_vel_spec.append(("target", PyBulletObservationType.BODY_POS))
 
@@ -172,21 +202,15 @@ class RobotEnv(PyBullet):
                 action (np.array): the action that is applied in the current state;
                 next_state (np.array): the state reached after applying the given action;
                 absorbing (bool): whether next_state is an absorbing state or not.
-        """
-        for index in self.kinematics_update_idx:
-            self.kinematics_pos[index[0]] = state[index[1]]
-        self.kinematics.forward(self.kinematics_pos)
-        tcp_frame_id = self.kinematics.model.getFrameId("joint_tcp")
-        self.tcp_pose = self.kinematics.get_frame(tcp_frame_id)
-        goal = np.linalg.norm(self.tcp_pose.translation - self.target_pos)
+        """        
 
         # visualize closure
         if self.debug_gui:
-            self._client.changeVisualShape(self.target_pb_id, -1, rgbaColor=[np.sin(abs(goal)/2), np.cos(abs(goal)/2), 0, 0.5])
+            self._client.changeVisualShape(self.target_pb_id, -1, rgbaColor=[np.sin(abs(self.goal_distance)/2), np.cos(abs(self.goal_distance)/2), 0, 0.5])
 
-        reward = -goal + 2
-        if goal < 0.05:
-            reward += 10
+        reward = -self.goal_distance*5 + 2
+        if self.goal_distance < 0.05:
+            reward += 5
 
         reward -= 0.01 * np.linalg.norm(action)
 
@@ -200,14 +224,29 @@ class RobotEnv(PyBullet):
 
     def is_absorbing(self, state):
         """ Check whether the given state is an absorbing state or not """
+        for index in self.kinematics_update_idx:
+            self.kinematics_pos[index[0]] = state[index[1]]
+        self.kinematics.forward(self.kinematics_pos)
+        tcp_frame_id = self.kinematics.model.getFrameId("joint_tcp")
+        self.tcp_pose = self.kinematics.get_frame(tcp_frame_id)
+        self.goal_distance = np.linalg.norm(self.tcp_pose.translation[:2] - self.target_pos[:2])
+
         # if self._in_collision():
         #     return True
-        if abs(state[0]) >= 3.14:
-            return True            
-        
-        if abs(state[1]) >= 3.14:
-            return True
+        self.step_counter += 1
 
+        threshold = (self.joints.limits()[1] - self.joints.limits()[0]) * 0.01
+        if (state[0:2] - self.joints.limits()[0] < threshold).any() or \
+                (self.joints.limits()[1] - state[0:2] < threshold).any():
+            self.count_joint_constraint += 1
+            if self.collide_termination:
+                self.episode_steps.append(self.step_counter)
+                self.final_distance_list.append(self.goal_distance)
+                return True
+
+        if self.step_counter >= self.info.horizon:
+            self.episode_steps.append(self.step_counter)
+            self.final_distance_list.append(self.goal_distance)
         return False
 
     def get_joint_states(self):
@@ -249,6 +288,7 @@ class RobotEnv(PyBullet):
         self.count_joint_constraint = 0
         self.episode_steps = list()
         self.key_frame_list = list()
+        self.final_distance_list = list()
 
     def get_log_info(self):
         return self.count_collide, self.count_joint_constraint, np.mean(self.episode_steps)
@@ -266,7 +306,7 @@ def test_env():
         R = 0
         while True:
             action = np.random.uniform(env.info.action_space.low, env.info.action_space.high)
-            action = np.zeros(3)
+            # action = np.zeros(3)
             observation, reward, absorbing, _ = env.step(action)
             J += reward * (env.info.gamma ** i)
             R += reward

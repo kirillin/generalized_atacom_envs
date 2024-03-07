@@ -10,7 +10,7 @@ from torch.utils.tensorboard import SummaryWriter
 from tqdm import trange
 
 from safe_rl.utils.network import *
-from robot_mushroom_env import RobotEnv
+from robot_atacom_env import RobotAtacomEnv
 
 from mushroom_rl.core import Core, Logger
 from mushroom_rl.algorithms.actor_critic import SAC
@@ -27,15 +27,15 @@ def experiment(
         env: str = 'robot_two_dof',
         alg: str = 'sac',
         preprocessor: str = 'MinMaxPreprocessor',
-        n_epochs: int = 15,
-        n_steps: int = 1000,
+        n_epochs: int = 200,
+        n_steps: int = 3000,
         n_steps_per_fit: int = 1,
-        n_episodes_test: int = 10,
+        n_episodes_test: int = 5,
         quiet: bool = False,
-        use_cuda: bool = False,
-        n_features: str = "256-256-256",
-        actor_lr: float = 3e-4,
-        critic_lr: float = 3e-4,
+        use_cuda: bool = True,
+        n_features: str = "256-256",
+        actor_lr: float = 1e-5,
+        critic_lr: float = 3e-5,
         batch_size: int = 64,
         initial_replay_size: int = 5000,
         max_replay_size: int = 200000,
@@ -45,7 +45,7 @@ def experiment(
         target_entropy: int = -10,
         gamma: float = 0.995,
         horizon: int = 500,
-        control: str = 'velocity_position',
+        control: str = 'velocity',
         timestep: float = 1 / 240.,
         n_intermediate_steps: int = 8,
         debug_gui: bool = False,
@@ -61,8 +61,8 @@ def experiment(
     np.random.seed(seed)
     torch.random.manual_seed(seed)
     
-    mdp = RobotEnv(gamma=gamma, horizon=horizon, timestep=timestep,
-                    n_intermediate_steps=n_intermediate_steps, debug_gui=debug_gui)
+    mdp = RobotAtacomEnv(gamma=gamma, horizon=horizon, timestep=timestep, control=control, atacom_slack_type=atacom_slack_type,
+                    n_intermediate_steps=n_intermediate_steps, debug_gui=debug_gui, device=device)
     
     logger = Logger(results_dir=results_dir, seed=seed, use_timestamp=True)
     writer = SummaryWriter(log_dir=logger.path)
