@@ -13,7 +13,62 @@ from onedof import OneDof
 
 from tqdm import trange
 
-from safe_rl.utils.network import *
+# from safe_rl.utils.network import *
+
+import torch
+import torch.nn as nn
+
+
+class SACCriticNetwork(nn.Module):
+    def __init__(self, input_shape, output_shape, n_features, **kwargs):
+        super().__init__()
+
+        n_input = input_shape[-1]
+        n_output = output_shape[0]
+
+        self.topology = [n_input] + n_features + [n_output]
+        layers = []
+        for i in range(len(self.topology) - 2):
+            layers.append(nn.Linear(self.topology[i], self.topology[i + 1]))
+            nn.init.xavier_uniform_(layers[-1].weight, gain=nn.init.calculate_gain('tanh'))
+            layers.append(nn.ReLU())
+
+        layers.append(nn.Linear(self.topology[-2], self.topology[-1]))
+        nn.init.xavier_uniform_(layers[-1].weight, gain=nn.init.calculate_gain('relu'))
+
+        self._layers = layers
+        self.mlp = torch.nn.Sequential(*layers)
+
+    def forward(self, state, action):
+        state_action = torch.cat((state.float(), action.float()), dim=1)
+        q = self.mlp(state_action)
+        return torch.squeeze(q)
+
+
+class SACActorNetwork(nn.Module):
+    def __init__(self, input_shape, output_shape, n_features, **kwargs):
+        super(SACActorNetwork, self).__init__()
+
+        n_input = input_shape[-1]
+        n_output = output_shape[0]
+
+        self.topology = [n_input] + n_features + [n_output]
+        layers = []
+        for i in range(len(self.topology) - 2):
+            layers.append(nn.Linear(self.topology[i], self.topology[i + 1]))
+            nn.init.xavier_uniform_(layers[-1].weight, gain=nn.init.calculate_gain('tanh'))
+            layers.append(nn.ReLU())
+
+        layers.append(nn.Linear(self.topology[-2], self.topology[-1]))
+        nn.init.xavier_uniform_(layers[-1].weight, gain=nn.init.calculate_gain('linear'))
+
+        self._layers = layers
+        self.mlp = torch.nn.Sequential(*layers)
+
+    def forward(self, state):
+        a = self.mlp(state.float())
+        return a
+
 
 
 def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
@@ -27,10 +82,10 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
     mdp = OneDof()
 
     # Settings
-    initial_replay_size = 256
-    max_replay_size = 100000
+    initial_replay_size = 128
+    max_replay_size = 50000
     batch_size = 64
-    n_features = [256,256,256]
+    n_features = [128,128]
     warmup_transitions = 100
     tau = 0.001
     lr_alpha = 3e-4
@@ -83,7 +138,8 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
 
     for n in trange(n_epochs, leave=False):
         core.learn(n_steps=n_steps, n_steps_per_fit=1)
-        dataset = core.evaluate(n_steps=n_steps_test, render=True)
+        # dataset = core.evaluate(n_steps=n_steps_test, render=True)
+        dataset = core.evaluate(n_episodes=5, render=False)
 
         J = np.mean(dataset.discounted_return)
         R = np.mean(dataset.undiscounted_return)
@@ -100,7 +156,8 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
 
 
 if __name__ == '__main__':
-    save = False
+    save = True
     load = False
     TorchUtils.set_default_device('cpu')
-    experiment(alg=SAC, n_epochs=20, n_steps=5000, n_steps_test=2000, save=save, load=load)
+    # experiment(alg=SAC, n_epochs=20, n_steps=5000, n_steps_test=2000, save=save, load=load)
+    experiment(alg=SAC, n_epochs=500, n_steps=2000, n_steps_test=200, save=save, load=load)

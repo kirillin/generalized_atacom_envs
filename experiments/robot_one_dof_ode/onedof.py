@@ -27,20 +27,21 @@ class OneDof(Environment):
         self._random = random_start
         self._random_target = random_target
 
-        high = np.array([1, 1])   # limits for state q, dq
+        high = np.array([np.pi, np.pi])   # limits for state q, dq
 
         # MDP properties
         dt = 1e-2
         observation_space = spaces.Box(low=-high, high=high)
-        action_space = spaces.Box(low=np.array([-self._max_u]),
-                                  high=np.array([self._max_u]))
+        action_space = spaces.Box(low=np.array([-self._max_u]*32),
+                                  high=np.array([self._max_u]*32))
         horizon = 300
         mdp_info = MDPInfo(observation_space, action_space, gamma, horizon, dt)
 
         # target
         self.target_theta = 0
         self.target_point = np.array([1, 0])
-        self.current_theta = 0
+        self._state_prev = np.array([0, 0])
+        self.rotations = 0
 
         # Visualization
         self._viewer = Viewer(5 * self._r, 5 * self._r)
@@ -49,62 +50,37 @@ class OneDof(Environment):
         super().__init__(mdp_info)
 
     def reset(self, state=None):
-        if state is None:
-            if self._random:
-                angle = np.random.uniform(-np.pi / 2, np.pi / 2)
-            else:
-                angle = -np.pi/8
+        self.rotations = 0
 
-            # self._state = np.array([angle, 0.])
-            self._state = np.array([np.cos(angle), np.sin(angle)])
-        else:
-            self._state = state
-            self._state[0] = normalize_angle(self._state[0])
+        angle = -np.pi/8
+        self._state = np.array([angle, 0.])
 
-        self._last_x = 0
-
-        if self._random_target:
-            self.target_theta = normalize_angle(np.random.uniform(-3.14, 3.14))
-            self.target_point = self.fk(self.target_theta)
-        else:
-            self.target_point = self.fk(3 * np.pi / 2)
-
-        return self._state, {}
-
-    def setup(self, state=None):
-        """ executes the setup code after an environment reset """
         self.target_theta = normalize_angle(np.random.uniform(-3.14, 3.14))
         self.target_point = self.fk(self.target_theta)
-        super(OneDof, self).setup(state)
+
+        return self._state, {}
 
     def step(self, action):
         u = self._bound(action[0], -self._max_u, self._max_u)
         new_state = odeint(self._dynamics, self._state, [0, self.info.dt], (u,))
 
         self._state = np.array(new_state[-1])
-        # self._state[0] = normalize_angle(self._state[0])
+        self._state[0] = normalize_angle(self._state[0])
 
-        error = np.norm(self.target_point - self._state)
-        reward = - error**2 - 0.01 * action[0]**2
+        self.error = np.linalg.norm(self.target_point - self.fk(self._state[0]))
 
-        # # option 1 -- simple reward by angle
-        # reward = -abserror
+        reward = - self.error - 0.01 * u**2
 
-        # # option 2 -- reward by state vector
-        # x = self._state
-        # Q = np.diag([3.0, 0.1])
-        # reward = - x.dot(Q).dot(x)
+        a = False
+        # delta_state = np.abs(self._state[0] - self._state_prev[0])
+        # self._state_prev = self._state
+       
+        # self.rotations += delta_state
+        # if self.rotations > 2 * np.pi:
+        #     print('round!')
+        #     a = True
 
-        # option 3 -- reward for cartesian space point attraction
-        # error = normalize_angle(np.linalg.norm(self.target_point - self.fk(self._state[0])))
-        # reward = - error**2 - 0.1 * self._state[1]**2 - 0.01 * action[0]**2
-
-        if error < 0.05:
-            reward = 10
-        
-        absorbing = False
-
-        return self._state, reward, absorbing, {}
+        return self._state, reward, a, {}
 
     def _f(self, x):
         theta, dtheta = x[0], x[1]
@@ -121,10 +97,7 @@ class OneDof(Environment):
 
     def _dynamics(self, state, t, u):
         x = np.array([state[0], state[1]])
-        tau = u
-        if self.is_closedloop:
-           tau = self._pd_control(state, t, u)
-        dxdt = self._f(x) + self._G(x) * tau
+        dxdt = self._f(x) + self._G(x) * u
         return dxdt.tolist()
 
     def _pd_control(self, state, t, u):
@@ -141,7 +114,8 @@ class OneDof(Environment):
 
         end[0] += 2 * self._r * np.cos(self._state[0])
         end[1] += 2 * self._r * np.sin(self._state[0])
-        self._viewer.line(start, end, color=(255, 255, 255), width=1)
+        scale = self.error / 2.
+        self._viewer.line(start, end, color=(255*scale, 255-255*scale, 0), width=1)
 
         end_target[0] += 2 * self._r * np.cos(self.target_theta)
         end_target[1] += 2 * self._r * np.sin(self.target_theta)

@@ -9,7 +9,7 @@ from mushroom_rl.algorithms.actor_critic import SAC
 from mushroom_rl.core import Core, Logger
 from mushroom_rl.utils import TorchUtils
 
-from onedof2 import OneDof
+from onedof import OneDof
 
 
 from tqdm import trange
