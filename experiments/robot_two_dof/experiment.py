@@ -24,7 +24,7 @@ from experiment_launcher.decorators import single_experiment
 
 @single_experiment
 def experiment(
-        env: str = 'robot_two_dof',
+        env: str = 'robot_two_dof_atacom',
         alg: str = 'sac',
         preprocessor: str = 'MinMaxPreprocessor',
         n_epochs: int = 200,
@@ -237,16 +237,16 @@ def log_data(core, dataset, logger, writer, log_params):
     writer.add_scalar("others/average_steps", average_steps, it)
     log_dict.update({"collisions": num_col, "joint_constraint": num_constrain, "average_steps": average_steps})
     logger.log_numpy(collisions=num_col, joint_constraints=num_constrain, average_steps=average_steps)
-    # if log_params['env_name'].endswith("atacom") or log_params['env_name'].endswith("se"):
-    #     g_avg, g_max = mdp.get_constraints_logs()
-    #     writer.add_scalar("others/max_constraint", g_max, it)
-    #     writer.add_scalar("others/average_constraint", g_avg, it)
-    #     logger.log_numpy(max_constraint=g_max, average_constraint=g_avg)
-    #     log_dict.update({"max_c": g_max, "avg_c": g_avg})
+    if log_params['env_name'].endswith("atacom") or log_params['env_name'].endswith("se"):
+        g_avg, g_max = mdp.get_constraints_logs()
+        writer.add_scalar("others/max_constraint", g_max, it)
+        writer.add_scalar("others/average_constraint", g_avg, it)
+        logger.log_numpy(max_constraint=g_max, average_constraint=g_avg)
+        log_dict.update({"max_c": g_max, "avg_c": g_avg})
 
-    #     if log_params['save_key_frame']:
-    #         for j, key_frame in enumerate(env_base.key_frame_list):
-    #             writer.add_image("key_frame_" + str(j), key_frame, it, dataformats='HWC')
+        if log_params['save_key_frame']:
+            for j, key_frame in enumerate(env_base.key_frame_list):
+                writer.add_image("key_frame_" + str(j), key_frame, it, dataformats='HWC')
     logger.epoch_info(it, **log_dict)
 
 
