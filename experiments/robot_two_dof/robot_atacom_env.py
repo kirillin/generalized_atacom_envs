@@ -90,15 +90,15 @@ class RobotAtacomEnv(AtacomEnvWrapper):
         return 0
 
 def test_atacom_env():
-    mdp = RobotAtacomEnv(debug_gui=True, atacom_slack_type='softcorner')
+    mdp = RobotAtacomEnv(debug_gui=True, atacom_slack_type='softcorner', slack_beta_joint_constraint=1.0)
     while True:
         # mdp.reset()
         print(mdp.env.info.action_space.low, mdp.env.info.action_space.high)
         for i in range(mdp.info.horizon):
             # action = np.random.uniform(mdp.info.action_space.low, mdp.info.action_space.high)
-            action = np.cos(i/100)*mdp.info.action_space.high*10
-            # action = np.zeros_like(mdp.info.action_space.low)
-            # action[0] = 1.
+            # action = np.cos(i/100)*mdp.info.action_space.high*10
+            action = np.zeros_like(mdp.info.action_space.low)
+            action[0] = 1.
             state, reward, absorbing, _ = mdp.step(action)
             print(state)
             if absorbing:

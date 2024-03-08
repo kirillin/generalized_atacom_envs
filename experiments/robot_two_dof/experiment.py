@@ -33,15 +33,15 @@ def experiment(
         n_episodes_test: int = 5,
         quiet: bool = False,
         use_cuda: bool = True,
-        n_features: str = "256-256",
-        actor_lr: float = 1e-5,
-        critic_lr: float = 3e-5,
+        n_features: str = "256-256-256",
+        actor_lr: float = 1e-4,
+        critic_lr: float = 3e-4,
         batch_size: int = 64,
         initial_replay_size: int = 5000,
         max_replay_size: int = 200000,
         tau: float = 1e-3,
         warmup_transitions: int = 5000,
-        lr_alpha: float = 1e-6,
+        lr_alpha: float = 1e-4,
         target_entropy: int = -10,
         gamma: float = 0.995,
         horizon: int = 500,
@@ -237,16 +237,16 @@ def log_data(core, dataset, logger, writer, log_params):
     writer.add_scalar("others/average_steps", average_steps, it)
     log_dict.update({"collisions": num_col, "joint_constraint": num_constrain, "average_steps": average_steps})
     logger.log_numpy(collisions=num_col, joint_constraints=num_constrain, average_steps=average_steps)
-    if log_params['env_name'].endswith("atacom") or log_params['env_name'].endswith("se"):
-        g_avg, g_max = mdp.get_constraints_logs()
-        writer.add_scalar("others/max_constraint", g_max, it)
-        writer.add_scalar("others/average_constraint", g_avg, it)
-        logger.log_numpy(max_constraint=g_max, average_constraint=g_avg)
-        log_dict.update({"max_c": g_max, "avg_c": g_avg})
+    # if log_params['env_name'].endswith("atacom") or log_params['env_name'].endswith("se"):
+    #     g_avg, g_max = mdp.get_constraints_logs()
+    #     writer.add_scalar("others/max_constraint", g_max, it)
+    #     writer.add_scalar("others/average_constraint", g_avg, it)
+    #     logger.log_numpy(max_constraint=g_max, average_constraint=g_avg)
+    #     log_dict.update({"max_c": g_max, "avg_c": g_avg})
 
-        if log_params['save_key_frame']:
-            for j, key_frame in enumerate(env_base.key_frame_list):
-                writer.add_image("key_frame_" + str(j), key_frame, it, dataformats='HWC')
+    #     if log_params['save_key_frame']:
+    #         for j, key_frame in enumerate(env_base.key_frame_list):
+    #             writer.add_image("key_frame_" + str(j), key_frame, it, dataformats='HWC')
     logger.epoch_info(it, **log_dict)
 
 
