@@ -6,58 +6,58 @@ from mushroom_rl.rl_utils import spaces
 from mushroom_rl.utils.angles import normalize_angle
 from mushroom_rl.utils.viewer import Viewer
 
+from gym.utils import seeding
+
 
 class OneDof(Environment):
     """
         tau = m ddq + c dq + m g r cos(q)
     """
     
-    def __init__(self, random_start=False, random_target=False, is_closedloop=False):
-        self.is_closedloop = is_closedloop
+    def __init__(self,):
 
-        # MDP parameters
-        gamma = 0.97
+        self._m = 1.
+        self._r = 0.5
+        self._max_dq = 1.0
+        self._max_u = 1.0
+        self.goal = 0.0
 
-        self._m = 1.0
-        self._c = 1.0
-        self._r = 0.5   # center mass position
-        self._g = 9.81
-        self._max_u = 2
-
-        self._random = random_start
-        self._random_target = random_target
-
-        high = np.array([np.pi, np.pi])   # limits for state q, dq
-
-        # MDP properties
-        dt = 1e-2
+        high = np.array([np.pi, self._max_dq])
+        action_space = spaces.Box(low=-self._max_u, high=self._max_u, shape=(1,))
         observation_space = spaces.Box(low=-high, high=high)
-        action_space = spaces.Box(low=np.array([-self._max_u]),
-                                  high=np.array([self._max_u]))
-        horizon = 300
-        mdp_info = MDPInfo(observation_space, action_space, gamma, horizon, dt)
 
-        # target
-        self.target_theta = 0
-        self.target_point = np.array([1, 0])
-        self._state_prev = np.array([0, 0])
-        self.rotations = 0
+        # mdp params and props
+        gamma = 0.97
+        horizon = 300
+        dt = 1e-2
+       
+        mdp_info = MDPInfo(observation_space, action_space, gamma, horizon, dt)
 
         # Visualization
         self._viewer = Viewer(5 * self._r, 5 * self._r)
         self._last_x = 0
 
+        # reset
+        self.np_random = None
+        self.seed()
+        self.reset()
+
         super().__init__(mdp_info)
 
+    def seed(self, seed=None):
+        self.np_random, seed = seeding.np_random(seed)
+        return [seed]
+    
     def reset(self, state=None):
-        angle = -np.pi/8
-        self._state = np.array([angle, 0.])
-
-        self.target_theta = normalize_angle(np.random.uniform(-3.14, 3.14))
-        self.target_point = self.fk(self.target_theta)
-
+        high = np.array([np.pi, self._max_dq])
+        # self._state = self.np_random.uniform(low=-high, high=high)
+        self._state = np.zeros(2)
+        self.target_theta = self.np_random.uniform(low=-high, high=high)[0]
         return self._state, {}
-        
+
+    # def setup(self, state=None):
+    #     super(OneDof, self).setup(state)
+
     def step(self, action):
         u = self._bound(action[0], -self._max_u, self._max_u)
         new_state = odeint(self._dynamics, self._state, [0, self.info.dt], (u,))
@@ -65,19 +65,23 @@ class OneDof(Environment):
         self._state = np.array(new_state[-1])
         self._state[0] = normalize_angle(self._state[0])
 
-        self.error = abs(self.target_theta - self._state[0])
-
-        reward = - self.error * 5
-        # if self.error < 0.05:
-        #     reward += 5
-
-        return self._state, reward, False, {}
+        # reward = - ((self.target_theta - self._state[0]) ** 2 + 0.1 * self._state[1] ** 2)
+        error = np.abs(self.target_theta - self._state[0])
+        absorbing = False
+        if error < 0.01:
+            reward = 100
+            absorbing = True
+        else:
+            reward = -error**2
+        
+        
+        return self._state, reward, absorbing, {}
 
     def _f(self, x):
         theta, dtheta = x[0], x[1]
         return np.array([
             dtheta,
-            -self._c / self._m * dtheta - self._g * self._r * np.cos(theta)
+            0 # -self._c / self._m * dtheta - self._g * self._r * np.cos(theta)
         ])
 
     def _G(self, x):
@@ -87,15 +91,17 @@ class OneDof(Environment):
         ])
 
     def _dynamics(self, state, t, u):
-        dxdt = self._f(state) + self._G(state) * u
+        x = np.array([state[0], state[1]])
+        dxdt = self._f(x) + self._G(x) * u
         return dxdt.tolist()
 
-    def get_state(self):
-        return self._state
+    def _pd_control(self, state, t, u):
+        """desired angle control"""
+        x = np.array([state[0], state[1]])
+        k = 10.
+        b = 2  * np.sqrt(self._m * k)
+        return k * (u - x[0]) - b * x[1]
 
-    def get_target(self):
-        return self.target_theta
-    
     def render(self, record=False):
         start = 2.5 * self._r * np.ones(2)
         end = 2.5 * self._r * np.ones(2)
@@ -103,9 +109,7 @@ class OneDof(Environment):
 
         end[0] += 2 * self._r * np.cos(self._state[0])
         end[1] += 2 * self._r * np.sin(self._state[0])
-        # scale = self.error / 2.
-        scale = 1.0
-        self._viewer.line(start, end, color=(255*scale, 255-255*scale, 0), width=2)
+        self._viewer.line(start, end, color=(255, 255, 255), width=1)
 
         end_target[0] += 2 * self._r * np.cos(self.target_theta)
         end_target[1] += 2 * self._r * np.sin(self.target_theta)
@@ -139,20 +143,13 @@ def main():
     onedof.reset(np.array([np.pi/2, 0]))
 
     while True:
-
-        # pd control
-        state = onedof.get_state()
-        u = 100. * (onedof.get_target() - state[0]) - 20. * state[1]
-
-        # step intergator
-        onedof.step(np.array([u]))
-
+        onedof.step(np.array([0.01]))
         onedof.render()
 
         xy = onedof.fk(onedof._state[0])
         q = onedof.ik(xy)
                        
-        # print(f"IK: {q}, FK: {xy}")
+        print(f"IK: {q}, FK: {xy}")
 
 
 if __name__ == '__main__':
