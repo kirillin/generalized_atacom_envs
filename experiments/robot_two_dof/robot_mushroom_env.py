@@ -141,16 +141,16 @@ class RobotEnv(PyBullet):
     def construct_act_obs_spec(self):
         actuation_spec = list()
         observation_pos_spec = list()
-        observation_vel_spec = list()
+        observation_target_spec = list()
 
         actuation_spec.append(("joint_1", self.control_flags['mode']))
         actuation_spec.append(("joint_2", self.control_flags['mode']))
         observation_pos_spec.append(("joint_1", PyBulletObservationType.JOINT_POS))
         observation_pos_spec.append(("joint_2", PyBulletObservationType.JOINT_POS))
 
-        observation_vel_spec.append(("target", PyBulletObservationType.BODY_POS))
+        observation_target_spec.append(("target", PyBulletObservationType.BODY_POS))
 
-        return actuation_spec, observation_pos_spec + observation_vel_spec
+        return actuation_spec, observation_pos_spec + observation_target_spec
 
     def reset(self, state=None):
         observation = super().reset(state)
@@ -158,7 +158,7 @@ class RobotEnv(PyBullet):
 
     def setup(self, state=None):
         """ executes the setup code after an environment reset """
-        x, y, z = np.random.uniform([-2,-2, 1], [2,2,1])
+        x, y, z = np.random.uniform([-1,-2, 0], [1,2,0])
         radius = 2.0 # hardcoded, the robot length
 
         distance_to_point = np.sqrt(x**2 + y**2)
@@ -170,10 +170,8 @@ class RobotEnv(PyBullet):
             x, y = projected_x, projected_y
         
         self.target_pos = [x, y, z]
-
-
-        if self.debug_gui:
-            self._client.resetBasePositionAndOrientation(self.target_pb_id, self.target_pos, [0., 0., 0., 1.])
+        
+        self.client.resetBasePositionAndOrientation(self.target_pb_id, self.target_pos, [0., 0., 0., 1.])
 
         self.kinematics_pos = np.zeros(self.kinematics.model.nq)
 
@@ -206,11 +204,11 @@ class RobotEnv(PyBullet):
 
         # visualize closure
         if self.debug_gui:
-            self._client.changeVisualShape(self.target_pb_id, -1, rgbaColor=[np.sin(abs(self.goal_distance)/2), np.cos(abs(self.goal_distance)/2), 0, 0.5])
+            self.client.changeVisualShape(self.target_pb_id, -1, rgbaColor=[np.sin(abs(self.goal_distance)/2), np.cos(abs(self.goal_distance)/2), 0, 0.5])
 
-        reward = -self.goal_distance*5 + 2
-        if self.goal_distance < 0.05:
-            reward += 5
+        reward = -self.goal_distance*5
+        if self.goal_distance < 0.02:
+            reward += 10
 
         reward -= 0.01 * np.linalg.norm(action)
 
