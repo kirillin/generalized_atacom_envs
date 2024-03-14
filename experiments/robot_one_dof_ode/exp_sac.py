@@ -9,7 +9,7 @@ from mushroom_rl.algorithms.actor_critic import SAC
 from mushroom_rl.core import Core, Logger
 from mushroom_rl.utils import TorchUtils
 
-from onedof_full_observation2 import OneDof
+from onedof import OneDof
 
 
 from tqdm import trange
@@ -79,10 +79,10 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
     mdp = OneDof()
 
     # Settings
-    initial_replay_size = 64
+    initial_replay_size = 256
     max_replay_size = 50000
-    batch_size = 64
-    n_features = 64
+    batch_size = 256
+    n_features = 256
     warmup_transitions = 100
     tau = 0.005
     lr_alpha = 3e-4
@@ -107,7 +107,7 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
         critic_input_shape = (actor_input_shape[0] + mdp.info.action_space.shape[0],)
         critic_params = dict(network=CriticNetwork,
                              optimizer={'class': optim.Adam,
-                                        'params': {'lr': 3e-4}},
+                                        'params': {'lr': 1e-4}},
                              loss=F.mse_loss,
                              n_features=n_features,
                              input_shape=critic_input_shape,
@@ -155,4 +155,4 @@ if __name__ == '__main__':
     save = False
     load = False
     TorchUtils.set_default_device('cpu')
-    experiment(alg=SAC, n_epochs=100, n_steps=1000, n_steps_test=500, save=save, load=load)
+    experiment(alg=SAC, n_epochs=100, n_steps=300, n_steps_test=300, save=save, load=load)
