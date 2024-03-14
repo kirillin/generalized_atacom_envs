@@ -10,7 +10,8 @@ from mushroom_rl.rl_utils.parameters import Parameter, LinearParameter
 
 from tqdm import trange
 
-from onedof import OneDof
+from onedof_full_observation2 import OneDof
+
 
 class Network(nn.Module):
     def __init__(self, input_shape, output_shape, n_features, **kwargs):

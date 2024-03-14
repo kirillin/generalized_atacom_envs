@@ -12,7 +12,7 @@ from mushroom_rl.rl_utils.optimizers import AdaptiveOptimizer
 from tqdm import tqdm, trange
 tqdm.monitor_interval = 0
 
-from onedof import OneDof
+from onedof_full_observation import OneDof
 
 
 def experiment(alg, params, n_epochs, n_episodes, n_ep_per_fit):

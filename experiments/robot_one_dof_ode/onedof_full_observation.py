@@ -10,24 +10,40 @@ from mushroom_rl.utils.viewer import Viewer
 class OneDof(Environment):
     """
         tau = m ddq + c dq + m g r cos(q)
+
+        Action space:
+            0 tau_1
+        Observation space:
+            0 cos(theta)
+            1 sin(theta)
+            2 x_target
+            3 y_target
+            4 dot_theta
+            5 x_tcp
+            6 y_tcp
     """
     
     def __init__(self, random_start=False, random_target=False, is_closedloop=False):
+        
         self.is_closedloop = is_closedloop
+
+        # initial state
+        self._x = np.zeros(2)
 
         # MDP parameters
         gamma = 0.97
 
-        self._m = 1.0
+        self._m = 0.1
         self._c = 1.0
         self._r = 0.5   # center mass position
         self._g = 9.81
-        self._max_u = 2
+        self._max_u = 2.
 
         self._random = random_start
         self._random_target = random_target
 
-        high = np.array([-np.pi, np.pi])   # limits for state q, dq
+        # high = np.array([-np.pi, np.pi])   # limits for state q, dq
+        high = np.array([-np.inf]*7)
 
         # MDP properties
         dt = 1e-2
@@ -50,34 +66,63 @@ class OneDof(Environment):
         super().__init__(mdp_info)
 
     def reset(self, state=None):
-        angle = -np.pi/8
-        self._state = np.array([angle, 0.])
+        theta = -np.pi/2 + 0.5
+        self._state = np.zeros(7)
+        x_tcp, y_tcp = self.fk(theta)
+        self._x = np.array([theta, 0])
 
         self.target_theta = normalize_angle(np.random.uniform(-3.14, 3.14))
+        # self.target_theta = 0
         self.target_point = self.fk(self.target_theta)
+
+        # reset observation
+        self._state[0] = np.cos(theta)
+        self._state[1] = np.sin(theta)
+        self._state[2] = self.target_point[0]
+        self._state[3] = self.target_point[1]
+        self._state[4] = 0
+        self._state[5] = x_tcp
+        self._state[6] = y_tcp
 
         return self._state, {}
         
     def step(self, action):
         u = self._bound(action[0], -self._max_u, self._max_u)
-        new_state = odeint(self._dynamics, self._state, [0, self.info.dt], (u,))
+        new_state = odeint(self._dynamics, self._x, [0, self.info.dt], (u,))
+        self._x = np.array(new_state[-1])
 
-        self._state = np.array(new_state[-1])
-        self._state[0] = normalize_angle(self._state[0])
+        theta, dot_theta = self._x
+        theta = normalize_angle(theta)
+        x_tcp, y_tcp = self.fk(theta)
 
-        self.error = abs(self.target_theta - self._state[0])
+        # update observation
+        self._state[0] = np.cos(theta)
+        self._state[1] = np.sin(theta)
+        self._state[2] = self.target_point[0]
+        self._state[3] = self.target_point[1]
+        self._state[4] = dot_theta
+        self._state[5] = x_tcp
+        self._state[6] = y_tcp
 
-        reward = - self.error * 5
-        # if self.error < 0.05:
-        #     reward += 5
+        # compute reward
+        self.error = np.abs(self.target_theta - theta)
+        reward = np.cos(self.target_theta - theta)
+        # reward = np.cos(theta)**2
+        if abs(theta) < 0.05:
+            reward += 5
 
-        return self._state, reward, False, {}
+        a = False
+        if np.pi - np.abs(theta) < 0.1:
+            a = True
+            reward = - 100
+
+        return self._state, reward, a, {}
 
     def _f(self, x):
         theta, dtheta = x[0], x[1]
         return np.array([
             dtheta,
-            -self._c / self._m * dtheta - self._g * self._r * np.cos(theta)
+            0 #-self._c / self._m * dtheta - self._g * self._r * np.cos(theta)
         ])
 
     def _G(self, x):
@@ -97,12 +142,13 @@ class OneDof(Environment):
         return self.target_theta
     
     def render(self, record=False):
+        theta = self._x[0]
         start = 2.5 * self._r * np.ones(2)
         end = 2.5 * self._r * np.ones(2)
         end_target = 2.5 * self._r * np.ones(2)
 
-        end[0] += 2 * self._r * np.cos(self._state[0])
-        end[1] += 2 * self._r * np.sin(self._state[0])
+        end[0] += 2 * self._r * np.cos(theta)
+        end[1] += 2 * self._r * np.sin(theta)
         # scale = self.error / 2.
         scale = 1.0
         self._viewer.line(start, end, color=(255*scale, 255-255*scale, 0), width=2)
@@ -141,8 +187,9 @@ def main():
     while True:
 
         # pd control
-        state = onedof.get_state()
-        u = 100. * (onedof.get_target() - state[0]) - 20. * state[1]
+        state = onedof._x
+        # u = 100. * (onedof.get_target() - state[0]) - 20. * state[1]
+        u = 100. * (0 - state[0]) - 20. * state[1]
 
         # step intergator
         onedof.step(np.array([u]))

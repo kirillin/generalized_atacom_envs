@@ -9,7 +9,10 @@ from mushroom_rl.algorithms.actor_critic import SAC
 from mushroom_rl.core import Core, Logger
 from mushroom_rl.utils import TorchUtils
 
-from onedof import OneDof
+# from onedof import OneDof
+# from mushroom_rl.environments.inverted_pendulum import InvertedPendulum
+
+from onedof_full_observation import OneDof
 
 from tqdm import trange
 
@@ -80,13 +83,15 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
 
     # MDP
     mdp = OneDof()
+    # mdp = InvertedPendulum(max_u=100.)
+
 
     # Settings
-    initial_replay_size = 128
-    max_replay_size = 50000
+    initial_replay_size = 256
+    max_replay_size = 100000
     batch_size = 64
-    n_features = [128,128]
-    warmup_transitions = 100
+    n_features = [256,256,256]
+    warmup_transitions = 1000
     tau = 0.001
     lr_alpha = 3e-4
 
@@ -138,8 +143,8 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
 
     for n in trange(n_epochs, leave=False):
         core.learn(n_steps=n_steps, n_steps_per_fit=1)
-        # dataset = core.evaluate(n_steps=n_steps_test, render=True)
-        dataset = core.evaluate(n_episodes=5, render=False)
+        dataset = core.evaluate(n_steps=n_steps_test, render=True)
+        # dataset = core.evaluate(n_episodes=5, render=False)
 
         J = np.mean(dataset.discounted_return)
         R = np.mean(dataset.undiscounted_return)
@@ -160,4 +165,4 @@ if __name__ == '__main__':
     load = False
     TorchUtils.set_default_device('cpu')
     # experiment(alg=SAC, n_epochs=20, n_steps=5000, n_steps_test=2000, save=save, load=load)
-    experiment(alg=SAC, n_epochs=500, n_steps=2000, n_steps_test=200, save=save, load=load)
+    experiment(alg=SAC, n_epochs=500, n_steps=1000, n_steps_test=1000, save=save, load=load)
