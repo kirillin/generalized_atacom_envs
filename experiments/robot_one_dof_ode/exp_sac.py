@@ -24,12 +24,19 @@ class CriticNetwork(nn.Module):
 
         self._h1 = nn.Linear(n_input, n_features)
         self._h2 = nn.Linear(n_features, n_features)
+        self._h22 = nn.Linear(n_features, n_features)
+        self._h222 = nn.Linear(n_features, n_features)
         self._h3 = nn.Linear(n_features, n_output)
 
         nn.init.xavier_uniform_(self._h1.weight,
                                 gain=nn.init.calculate_gain('relu'))
         nn.init.xavier_uniform_(self._h2.weight,
                                 gain=nn.init.calculate_gain('relu'))
+        nn.init.xavier_uniform_(self._h22.weight,
+                                gain=nn.init.calculate_gain('relu'))
+        nn.init.xavier_uniform_(self._h222.weight,
+                                gain=nn.init.calculate_gain('relu'))
+
         nn.init.xavier_uniform_(self._h3.weight,
                                 gain=nn.init.calculate_gain('linear'))
 
@@ -37,6 +44,10 @@ class CriticNetwork(nn.Module):
         state_action = torch.cat((state.float(), action.float()), dim=1)
         features1 = F.relu(self._h1(state_action))
         features2 = F.relu(self._h2(features1))
+
+        features2 = F.relu(self._h22(features2))
+        features2 = F.relu(self._h222(features2))
+
         q = self._h3(features2)
 
         return torch.squeeze(q)
