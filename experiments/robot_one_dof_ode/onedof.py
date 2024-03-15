@@ -24,7 +24,7 @@ class OneDof(Environment):
 
         # memory vars.
         self.x = np.zeros(2) # plant state
-        self.target_theta = 0
+        self.target_theta = np.random.uniform(-np.pi, np.pi) # generate new targe
         self.steps = 0
 
         # MDP parameters
@@ -46,9 +46,12 @@ class OneDof(Environment):
 
     def reset(self, state=None):
         self.x = np.array([-np.pi/8, 0]) # reset initial state of plant
-        if self.steps >= 50:
-            self.target_theta = np.random.uniform(-np.pi, np.pi) # generate new targe
-            self.steps = 0
+
+        # add uniform noize to state
+        self.x[0] = self.x[0] + np.random.uniform(low=-0.1, high=0.1)
+        self.x[1] = self.x[1] + np.random.uniform(low=-0.005, high=0.005)
+
+        self.target_theta = np.random.uniform(-np.pi, np.pi) # generate new targe
 
         self._state = self._get_obs()
         return self._get_obs(), {}
@@ -63,7 +66,6 @@ class OneDof(Environment):
         observation = self._get_obs()
         self._state = observation
         reward = self._get_reward(action)
-        # self._state = observation
         return observation, reward, False, {}
 
     def _get_reward(self, action):
@@ -71,9 +73,6 @@ class OneDof(Environment):
         reward_dist = -np.linalg.norm(vec)
         reward_ctrl = -np.square(action).sum()
         reward = reward_dist + reward_ctrl
-
-        if np.linalg.norm(vec) < 0.01:
-            self.steps += 1
         return reward
 
     def _f(self, x):

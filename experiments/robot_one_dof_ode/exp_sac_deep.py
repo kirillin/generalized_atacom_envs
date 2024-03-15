@@ -9,10 +9,10 @@ from mushroom_rl.algorithms.actor_critic import SAC
 from mushroom_rl.core import Core, Logger
 from mushroom_rl.utils import TorchUtils
 
-# from onedof import OneDof
+from onedof import OneDof
 # from mushroom_rl.environments.inverted_pendulum import InvertedPendulum
 
-from onedof_full_observation import OneDof
+# from onedof_full_observation import OneDof
 
 from tqdm import trange
 
@@ -33,7 +33,7 @@ class SACCriticNetwork(nn.Module):
         layers = []
         for i in range(len(self.topology) - 2):
             layers.append(nn.Linear(self.topology[i], self.topology[i + 1]))
-            nn.init.xavier_uniform_(layers[-1].weight, gain=nn.init.calculate_gain('tanh'))
+            nn.init.xavier_uniform_(layers[-1].weight, gain=nn.init.calculate_gain('relu'))
             layers.append(nn.ReLU())
 
         layers.append(nn.Linear(self.topology[-2], self.topology[-1]))
@@ -59,7 +59,7 @@ class SACActorNetwork(nn.Module):
         layers = []
         for i in range(len(self.topology) - 2):
             layers.append(nn.Linear(self.topology[i], self.topology[i + 1]))
-            nn.init.xavier_uniform_(layers[-1].weight, gain=nn.init.calculate_gain('tanh'))
+            nn.init.xavier_uniform_(layers[-1].weight, gain=nn.init.calculate_gain('relu'))
             layers.append(nn.ReLU())
 
         layers.append(nn.Linear(self.topology[-2], self.topology[-1]))
@@ -89,7 +89,7 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
     # Settings
     initial_replay_size = 256
     max_replay_size = 100000
-    batch_size = 64
+    batch_size = 256
     n_features = [256,256,256]
     warmup_transitions = 1000
     tau = 0.001
@@ -115,7 +115,7 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
         critic_input_shape = (actor_input_shape[0] + mdp.info.action_space.shape[0],)
         critic_params = dict(network=SACCriticNetwork,
                              optimizer={'class': optim.Adam,
-                                        'params': {'lr': 3e-4}},
+                                        'params': {'lr': 1e-4}},
                              loss=F.mse_loss,
                              n_features=n_features,
                              input_shape=critic_input_shape,
@@ -142,8 +142,8 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
     core.learn(n_steps=initial_replay_size, n_steps_per_fit=initial_replay_size)
 
     for n in trange(n_epochs, leave=False):
-        core.learn(n_steps=n_steps, n_steps_per_fit=1)
-        dataset = core.evaluate(n_steps=n_steps_test, render=True)
+        core.learn(n_steps=n_steps, n_steps_per_fit=100)
+        dataset = core.evaluate(n_steps=n_steps_test, render=False)
         # dataset = core.evaluate(n_episodes=5, render=False)
 
         J = np.mean(dataset.discounted_return)
@@ -163,6 +163,6 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
 if __name__ == '__main__':
     save = True
     load = False
-    TorchUtils.set_default_device('cpu')
+    TorchUtils.set_default_device('cuda')
     # experiment(alg=SAC, n_epochs=20, n_steps=5000, n_steps_test=2000, save=save, load=load)
-    experiment(alg=SAC, n_epochs=500, n_steps=1000, n_steps_test=1000, save=save, load=load)
+    experiment(alg=SAC, n_epochs=100000, n_steps=5000, n_steps_test=100, save=save, load=load)

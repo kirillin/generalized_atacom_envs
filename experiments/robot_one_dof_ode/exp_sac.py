@@ -146,7 +146,7 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
 
     for n in trange(n_epochs, leave=False):
         core.learn(n_steps=n_steps, n_steps_per_fit=1)
-        dataset = core.evaluate(n_steps=n_steps_test, render=False)
+        dataset = core.evaluate(n_steps=n_steps_test, render=True)
 
         J = np.mean(dataset.discounted_return)
         R = np.mean(dataset.undiscounted_return)
@@ -166,4 +166,4 @@ if __name__ == '__main__':
     save = True
     load = False
     TorchUtils.set_default_device('cuda')
-    experiment(alg=SAC, n_epochs=100000, n_steps=100, n_steps_test=50, save=save, load=load)
+    experiment(alg=SAC, n_epochs=100, n_steps=1000, n_steps_test=500, save=save, load=load)
