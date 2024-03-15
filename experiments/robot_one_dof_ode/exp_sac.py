@@ -9,8 +9,8 @@ from mushroom_rl.algorithms.actor_critic import SAC
 from mushroom_rl.core import Core, Logger
 from mushroom_rl.utils import TorchUtils
 
-from onedof import OneDof
-
+# from onedof import OneDof
+from onedof_with_limits import OneDof
 
 from tqdm import trange
 
@@ -184,4 +184,4 @@ if __name__ == '__main__':
     if args.eval:
         save = False
         load = True
-        experiment(alg=SAC, n_epochs=100, n_steps=1000, n_steps_test=500, save=save, load=load)
+        experiment(alg=SAC, n_epochs=20, n_steps=1000, n_steps_test=500, save=save, load=load)

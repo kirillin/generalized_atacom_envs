@@ -130,39 +130,56 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
     # Algorithm
     core = Core(agent, mdp)
 
-    # RUN
-    dataset = core.evaluate(n_steps=n_steps_test, render=True)
-
-    J = np.mean(dataset.discounted_return)
-    R = np.mean(dataset.undiscounted_return)
-    E = agent.policy.entropy(dataset.state)
-
-    logger.epoch_info(0, J=J, R=R, entropy=E)
-
-    core.learn(n_steps=initial_replay_size, n_steps_per_fit=initial_replay_size)
-
-    for n in trange(n_epochs, leave=False):
-        core.learn(n_steps=n_steps, n_steps_per_fit=100)
-        dataset = core.evaluate(n_steps=n_steps_test, render=False)
-        # dataset = core.evaluate(n_episodes=5, render=False)
+    if load:
+        logger.info('Press a button to visualize pendulum')
+        input()
+        core.evaluate(n_episodes=5, render=True)        
+    else:
+        # RUN
+        dataset = core.evaluate(n_steps=n_steps_test, render=True)
 
         J = np.mean(dataset.discounted_return)
         R = np.mean(dataset.undiscounted_return)
         E = agent.policy.entropy(dataset.state)
 
-        logger.epoch_info(n+1, J=J, R=R, entropy=E)
+        logger.epoch_info(0, J=J, R=R, entropy=E)
 
-        if save:
-            logger.log_best_agent(agent, J)
+        core.learn(n_steps=initial_replay_size, n_steps_per_fit=initial_replay_size)
 
-    logger.info('Press a button to visualize pendulum')
-    input()
-    core.evaluate(n_episodes=5, render=True)
+        for n in trange(n_epochs, leave=False):
+            core.learn(n_steps=n_steps, n_steps_per_fit=100)
+            dataset = core.evaluate(n_steps=n_steps_test, render=False)
+            # dataset = core.evaluate(n_episodes=5, render=False)
+
+            J = np.mean(dataset.discounted_return)
+            R = np.mean(dataset.undiscounted_return)
+            E = agent.policy.entropy(dataset.state)
+
+            logger.epoch_info(n+1, J=J, R=R, entropy=E)
+
+            if save:
+                logger.log_best_agent(agent, J)
+
+        logger.info('Press a button to visualize pendulum')
+        input()
+        core.evaluate(n_episodes=5, render=True)
 
 
 if __name__ == '__main__':
-    save = True
-    load = False
-    TorchUtils.set_default_device('cuda')
-    # experiment(alg=SAC, n_epochs=20, n_steps=5000, n_steps_test=2000, save=save, load=load)
-    experiment(alg=SAC, n_epochs=100000, n_steps=5000, n_steps_test=100, save=save, load=load)
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-l', '--learn', action='store_true')
+    parser.add_argument('-e', '--eval', action='store_true')
+    args = parser.parse_args()
+
+    TorchUtils.set_default_device('cpu')
+
+    if args.learn:
+        save = True
+        load = False
+
+    if args.eval:
+        save = False
+        load = True
+
+    experiment(alg=SAC, n_epochs=50, n_steps=1000, n_steps_test=500, save=save, load=load)
