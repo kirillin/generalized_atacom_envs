@@ -65,13 +65,14 @@ class OneDof(PyBullet):
         self.target_theta = 0
         self.steps_to_target = 0
 
+        self.client.resetDebugVisualizerCamera(3.1, 90, -91, (0,0,0))
+
     def set_target(self, target):
         self.target_theta = target
 
     def _modify_mdp_info(self, mdp_info):
-        observation_high = np.array([3.14, 1.0, 1, 1, 1, 1, 1, 1, 1])
-        observation_low = -observation_high
-        mdp_info.observation_space = Box(observation_low, observation_high)
+        observation_high = np.array([1, 1, 1, 1, np.inf, 2, 2])
+        mdp_info.observation_space = Box(-observation_high, observation_high)
         return mdp_info
 
     def _custom_load_models(self):
@@ -94,12 +95,6 @@ class OneDof(PyBullet):
                 )
 
     def construct_act_obs_spec(self):
-        """
-            action
-                dq \in R^1
-            observation
-                [q, dq] \in R^2
-        """
         actuation_spec = list()
         observation_pos_spec = list()
         observation_vel_spec = list()
@@ -111,23 +106,52 @@ class OneDof(PyBullet):
 
         return actuation_spec, observation_pos_spec + observation_vel_spec
 
+    def _create_observation(self, state):
+        """
+        state =
+        [ 3.14000000e+00 -4.26325641e-14  
+        0.00000000e+00  7.06080313e-01 2.20813176e+00  
+        0.00000000e+00 0.00000000e+00  0.00000000e+00  1.00000000e+00]
+        q, dq, target_pose(p, quat) ????
+        """
+        self.kinematics.forward(np.array([state[0], 0]))
+        tcp_frame_id = self.kinematics.model.getFrameId("joint_tcp")
+        tcp_pose = self.kinematics.get_frame(tcp_frame_id)
+        tcp = np.array(tcp_pose.translation.T[:2])
+
+        self.kinematics.forward(np.array([self.target_theta,0]))
+        tcp_frame_id = self.kinematics.model.getFrameId("joint_tcp")
+        tcp_pose = self.kinematics.get_frame(tcp_frame_id)
+        target = np.array(tcp_pose.translation.T[:2])
+        
+        self.target_pos = np.array(tcp_pose.translation.T)
+        self.target_pos[2] = 1.5
+        
+        obs = np.concatenate([
+            np.cos([state[0]]),
+            np.sin([state[0]]),
+            tcp,
+            [state[1]],
+            tcp - target
+        ])
+
+        return obs
+
     def reset(self, state=None):
         observation = super().reset(state)
-        self.steps_to_target = 0
-        self.steps = 0
-        return observation
+
+        # add noise
+        self._state[0] = self._state[0] + np.random.uniform(low=-0.1, high=0.1)
+        self._state[1] = self._state[1] + np.random.uniform(low=-0.005, high=0.005)
+
+        self.target_theta = np.random.uniform(-np.pi, np.pi) # generate new targe
+
+        observation = self._create_observation(self._state)
+        self.setup()
+        return observation, {}
 
     def setup(self, state=None):
-        """ executes the setup code after an environment reset """
-
-        # # generate new target point
-        # # y-z plane robot
-        # # for theta = 0 robot concine with z-axis
-        theta = np.random.uniform(-3.14, 3.14)
-        self.target_theta = theta
-        # theta = self.target_theta
-        self.target_pos = [0, np.cos(theta+np.pi/2), np.sin(theta+np.pi/2)+1.5]
-
+        
         if self.debug_gui:
             self._client.resetBasePositionAndOrientation(self.target_pb_id, self.target_pos, [0., 0., 0., 1.])
 
@@ -148,39 +172,36 @@ class OneDof(PyBullet):
                                               targetPosition=self.kinematics_pos[j])
 
         if self.debug_gui:
-            # self.client.resetDebugVisualizerCamera(3.1, 90, -91, (0,0,0))
-            self.client.resetDebugVisualizerCamera(2, 90, 0, (0,0,1))
-
+            # self.client.resetDebugVisualizerCamera(2, 90, 0, (0,0,1))
+            self.client.resetDebugVisualizerCamera(3.1, 90, -91, (0,0,0))
+    
         super(OneDof, self).setup(state)
 
     def reward(self, state, action, next_state, absorbing):
-        self.steps += 1
+        self.kinematics.forward(np.array([state[0], 0]))
+        tcp_frame_id = self.kinematics.model.getFrameId("joint_tcp")
+        tcp_pose = self.kinematics.get_frame(tcp_frame_id)
+        tcp = np.array(tcp_pose.translation.T[:2])
 
-        q, dq = state[:2]
-        goal = np.abs(self.target_theta - q)
+        self.kinematics.forward(np.array([self.target_theta,0]))
+        tcp_frame_id = self.kinematics.model.getFrameId("joint_tcp")
+        tcp_pose = self.kinematics.get_frame(tcp_frame_id)
+        target = np.array(tcp_pose.translation.T[:2])
 
-        reward = - goal**2 - 0.1 * dq**2 - 0.001 * action[0]**2
 
-        if goal < 0.05:
-            self.steps_to_target += 1
-            reward += 10.0
+        vec = tcp - target
+        reward_dist = -np.linalg.norm(vec)
+        reward_ctrl = -np.square(action).sum()
+        reward = reward_dist + reward_ctrl
 
-        # visualize closure
         if self.debug_gui:
-            self._client.changeVisualShape(self.target_pb_id, -1, rgbaColor=[np.sin(abs(goal)/2), np.cos(abs(goal)/2), 0, 0.5])
+            self._client.changeVisualShape(self.target_pb_id, -1, rgbaColor=[255, 0, 0, 0.5])
 
         return reward
 
     def is_absorbing(self, state):
-        """ Check whether the given state is an absorbing state or not """
-        if self.steps_to_target >= 1:
+        if np.pi - abs(state[0]) < 0.01 * np.pi:
             return True
-        if self.steps > 500:
-            return True
-
-        # if abs(state[0]) >= 3.14:
-        #     return True
-
         return False
 
     def get_joint_states(self):
@@ -212,18 +233,17 @@ def test_env():
     mdp.reset()
     
     u = 0
-    q_des = 1.5
-    t = time.time()
+    q_des = 1.57
+    
     while True:
+        t = time.time()
         res = mdp.step([u])
+        print(res[0])
         q, dq = res[0][:2]
         # print(f"{time.time() - t}\t{q}\t{dq}\t{u}\n")
-        print(mdp._mdp_info.observation_space.low)
-        u = 10 * (q_des - q) - 2  * dq
 
-        if time.time() - t > 3.0:
-            q_des = -q_des
-            t = time.time()
+        u = 10 * (q_des - q) - 2  * dq
+        q_des = np.sin(t)
 
 
 if __name__ == '__main__':

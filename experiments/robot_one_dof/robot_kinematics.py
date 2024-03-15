@@ -78,15 +78,15 @@ class Kinematics(object):
 def test_kinematics():
     kinematics = Kinematics(env_dir + '/models/one_dof.urdf')
     
-    q = np.array([0,0])
+    q = np.array([np.pi/2,0])
     
     kinematics.forward(q)
     tcp_frame_id = kinematics.model.getFrameId("joint_tcp")
     tcp_pose = kinematics.get_frame(tcp_frame_id)
     
-    print(q)
-    print(tcp_frame_id)
-    print(tcp_pose)
+    # print(q)
+    # print(tcp_frame_id)
+    print(tcp_pose.translation.T)
 
 if __name__ == '__main__':
     test_kinematics()
