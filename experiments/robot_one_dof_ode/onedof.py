@@ -16,15 +16,16 @@ class OneDof(Environment):
         self.is_closedloop = is_closedloop
 
         # Plant parameters
-        self._m = 1.0
+        self._m = 0.01
         self._c = 1.0
         self._r = 0.5   # center mass position
         self._g = 9.81
-        self._max_u = 20.   # value hardcoded in actor network
+        self._max_u = 1.   # value hardcoded in actor network
 
         # memory vars.
         self.x = np.zeros(2) # plant state
         self.target_theta = 0
+        self.steps = 0
 
         # MDP parameters
         gamma = 0.97
@@ -45,7 +46,11 @@ class OneDof(Environment):
 
     def reset(self, state=None):
         self.x = np.array([-np.pi/8, 0]) # reset initial state of plant
-        self.target_theta = np.random.uniform(-np.pi, np.pi) # generate new target
+        if self.steps >= 50:
+            self.target_theta = np.random.uniform(-np.pi, np.pi) # generate new targe
+            self.steps = 0
+
+        self._state = self._get_obs()
         return self._get_obs(), {}
         
     def step(self, action):
@@ -53,9 +58,10 @@ class OneDof(Environment):
         u = self._bound(action[0], -self._max_u, self._max_u)
         new_x = odeint(self._dynamics, self.x, [0, self.info.dt], (u,))
         self.x = np.array(new_x[-1]) # NON NORMALIZED
-        
+
         # compute reward
         observation = self._get_obs()
+        self._state = observation
         reward = self._get_reward(action)
         # self._state = observation
         return observation, reward, False, {}
@@ -65,6 +71,9 @@ class OneDof(Environment):
         reward_dist = -np.linalg.norm(vec)
         reward_ctrl = -np.square(action).sum()
         reward = reward_dist + reward_ctrl
+
+        if np.linalg.norm(vec) < 0.01:
+            self.steps += 1
         return reward
 
     def _f(self, x):
