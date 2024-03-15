@@ -102,14 +102,15 @@ class TwoDofMujoco(Environment):
         return reward
 
     def render(self, record=False):
+        _tcp = 2. * np.ones(2)
         _target = 2. * np.ones(2)
         
         start = 2. * np.ones(2)
         end = 1 * np.ones(2)
         end2 = 1 * np.ones(2)
 
-        end[0] = 1 * np.cos(self.x[0])
-        end[1] = 1 * np.sin(self.x[0])
+        end[0] = 1 * np.cos(self.x[0]+np.pi/2)
+        end[1] = 1 * np.sin(self.x[0]+np.pi/2)
         self._viewer.circle(start, 1, color=(100, 100, 100), width=1)
 
         end2[0] = 1 * np.cos(self.x[1])
@@ -121,8 +122,10 @@ class TwoDofMujoco(Environment):
 
         self._viewer.circle(end + start + end2, 0.1, color=(255, 255, 0), width=2)
 
+        _tcp   += self.fk(self.x[[0,1]])[0][:2] * 10
         _target += self.x[[2,3]] * 10
-        self._viewer.circle(_target, 0.1, color=(255, 0, 0), width=2)
+        self._viewer.circle(_tcp, 0.05, color=(255, 0, 0), width=4)
+        self._viewer.circle(_target, 0.05, color=(0, 255, 0), width=2)
         
         frame = self._viewer.get_frame() if record else None
         self._viewer.display(self.info.dt)

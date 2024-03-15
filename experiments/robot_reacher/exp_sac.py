@@ -87,8 +87,9 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
     logger.info('Experiment Algorithm: ' + alg.__name__)
 
     # MDP
-    xml_file = '/home/kika/path/iros2024/generalized_atacom_envs/experiments/robot_reacher/twodof.xml'
-    mdp = TwoDofMujoco(xml_file)
+    # path = '/home/kika/path/iros2024/generalized_atacom_envs/experiments/robot_reacher'
+    path = '/home/human/artemov/generalized_atacom_envs/experiments/robot_reacher'
+    mdp = TwoDofMujoco(f"{path}/twodof.xml")
 
     # Settings
     initial_replay_size = 256
@@ -180,9 +181,9 @@ if __name__ == '__main__':
     if args.learn:
         save = True
         load = False
-        experiment(alg=SAC, n_epochs=100, n_steps=1000, n_steps_test=500, save=save, load=load)
+        experiment(alg=SAC, n_epochs=100, n_steps=1000, n_steps_test=1000, save=save, load=load)
 
     if args.eval:
         save = False
         load = True
-        experiment(alg=SAC, n_epochs=100, n_steps=1000, n_steps_test=500, save=save, load=load)
+        experiment(alg=SAC, n_epochs=100, n_steps=1000, n_steps_test=1000, save=save, load=load)
