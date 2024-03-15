@@ -181,9 +181,9 @@ if __name__ == '__main__':
     if args.learn:
         save = True
         load = False
-        experiment(alg=SAC, n_epochs=100, n_steps=1000, n_steps_test=1000, save=save, load=load)
+        experiment(alg=SAC, n_epochs=200, n_steps=1000, n_steps_test=1000, save=save, load=load)
 
     if args.eval:
         save = False
         load = True
-        experiment(alg=SAC, n_epochs=100, n_steps=1000, n_steps_test=1000, save=save, load=load)
+        experiment(alg=SAC, n_epochs=200, n_steps=1000, n_steps_test=1000, save=save, load=load)

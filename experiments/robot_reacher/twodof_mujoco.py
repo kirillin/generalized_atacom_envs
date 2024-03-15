@@ -87,9 +87,13 @@ class TwoDofMujoco(Environment):
 
         # compute reward
         reward = self._get_reward(action)
-        
+        absorbing = False
+        for i in range(2):
+            if np.pi - np.abs(self.x[i]) < 0.01 * np.pi:
+                absorbing = True
+
         observation = self._get_observation()
-        return observation, reward, False, {}
+        return observation, reward, absorbing, {}
 
     def _get_reward(self, action):
         target_position = self.x[[2,3]]
@@ -109,12 +113,12 @@ class TwoDofMujoco(Environment):
         end = 1 * np.ones(2)
         end2 = 1 * np.ones(2)
 
-        end[0] = 1 * np.cos(self.x[0]+np.pi/2)
-        end[1] = 1 * np.sin(self.x[0]+np.pi/2)
+        end[0] = 1 * np.cos(self.x[0])
+        end[1] = 1 * np.sin(self.x[0])
         self._viewer.circle(start, 1, color=(100, 100, 100), width=1)
 
-        end2[0] = 1 * np.cos(self.x[1])
-        end2[1] = 1 * np.sin(self.x[1])
+        end2[0] = 1 * np.cos(self.x[0]+self.x[1])
+        end2[1] = 1 * np.sin(self.x[0]+self.x[1])
         self._viewer.circle(end + start, 1, color=(100, 100, 100), width=1)
 
         self._viewer.line(start, end + start, color=(255, 255, 0), width=4)
@@ -124,6 +128,7 @@ class TwoDofMujoco(Environment):
 
         _tcp   += self.fk(self.x[[0,1]])[0][:2] * 10
         _target += self.x[[2,3]] * 10
+
         self._viewer.circle(_tcp, 0.05, color=(255, 0, 0), width=4)
         self._viewer.circle(_target, 0.05, color=(0, 255, 0), width=2)
         
@@ -148,21 +153,18 @@ def test():
     q = np.array(towdof.x[[0,1]])
     dq = np.array(towdof.x[[4,5]])
 
-    q_des = np.array([np.pi/2, np.pi/2])
+    q_des = np.array([0., 0.])
     towdof.reset()
+
     while True:
-        u = 60. * (q_des - q) - 20. * dq
-        towdof.step(u)
-        # print(towdof.x)
+
         q = np.array(towdof.x[[0,1]])
         dq = np.array(towdof.x[[4,5]])
-        # print(towdof.fk(q)[0])
+        u = 1. * (q_des - q) - 0.2 * dq
+        q_des += np.array([0.,0.01]) 
+        
+        towdof.step(u)
         towdof.render()
-        q_des[0] += 0.002
-        q_des[1] += 0.01
-        # if q_des[0] >= np.pi/2:
-        #     towdof.reset()
-        #     q_des[0] = 0
 
 
 if __name__ == '__main__':
