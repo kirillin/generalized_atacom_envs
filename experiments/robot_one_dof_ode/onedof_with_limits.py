@@ -17,7 +17,7 @@ class OneDof(Environment):
 
         # Plant parameters
         self._m = 0.01
-        self._c = 1.0
+        self._c = 0.01
         self._r = 0.5   # center mass position
         self._g = 9.81
         self._max_u = 1.   # value hardcoded in actor network
@@ -88,7 +88,7 @@ class OneDof(Environment):
         theta, dtheta = x[0], x[1]
         return np.array([
             dtheta,
-            0#-self._c / self._m * dtheta - self._g * self._r * np.cos(theta)
+            -self._c / self._m * dtheta # - self._g * self._r * np.cos(theta)
         ])
 
     def _G(self, x):

@@ -15,68 +15,8 @@ from onedof_with_limits import OneDof
 from tqdm import trange
 
 
-class CriticNetwork(nn.Module):
-    def __init__(self, input_shape, output_shape, n_features, **kwargs):
-        super().__init__()
-
-        n_input = input_shape[-1]
-        n_output = output_shape[0]
-
-        self._h1 = nn.Linear(n_input, n_features)
-        self._h2 = nn.Linear(n_features, n_features)
-        self._h22 = nn.Linear(n_features, n_features)
-        self._h222 = nn.Linear(n_features, n_features)
-        self._h3 = nn.Linear(n_features, n_output)
-
-        nn.init.xavier_uniform_(self._h1.weight,
-                                gain=nn.init.calculate_gain('relu'))
-        nn.init.xavier_uniform_(self._h2.weight,
-                                gain=nn.init.calculate_gain('relu'))
-        nn.init.xavier_uniform_(self._h22.weight,
-                                gain=nn.init.calculate_gain('relu'))
-        nn.init.xavier_uniform_(self._h222.weight,
-                                gain=nn.init.calculate_gain('relu'))
-
-        nn.init.xavier_uniform_(self._h3.weight,
-                                gain=nn.init.calculate_gain('linear'))
-
-    def forward(self, state, action):
-        state_action = torch.cat((state.float(), action.float()), dim=1)
-        features1 = F.relu(self._h1(state_action))
-        features2 = F.relu(self._h2(features1))
-
-        features2 = F.relu(self._h22(features2))
-        features2 = F.relu(self._h222(features2))
-
-        q = self._h3(features2)
-
-        return torch.squeeze(q)
-
-
-class ActorNetwork(nn.Module):
-    def __init__(self, input_shape, output_shape, n_features, **kwargs):
-        super(ActorNetwork, self).__init__()
-
-        n_input = input_shape[-1]
-        n_output = output_shape[0]
-
-        self._h1 = nn.Linear(n_input, n_features)
-        self._h2 = nn.Linear(n_features, n_features)
-        self._h3 = nn.Linear(n_features, n_output)
-
-        nn.init.xavier_uniform_(self._h1.weight,
-                                gain=nn.init.calculate_gain('relu'))
-        nn.init.xavier_uniform_(self._h2.weight,
-                                gain=nn.init.calculate_gain('relu'))
-        nn.init.xavier_uniform_(self._h3.weight,
-                                gain=nn.init.calculate_gain('linear'))
-
-    def forward(self, state):
-        features1 = F.relu(self._h1(torch.squeeze(state, 1).float()))
-        features2 = F.relu(self._h2(features1))
-        a = self._h3(features2)
-
-        return a
+from nn import SACActorNetwork as ActorNetwork
+from nn import SACCriticNetwork as CriticNetwork
 
 
 def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
@@ -93,7 +33,8 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
     initial_replay_size = 256
     max_replay_size = 50000
     batch_size = 256
-    n_features = 256
+    actor_n_features = [256]
+    critic_n_features = [256,256]
     warmup_transitions = 100
     tau = 0.005
     lr_alpha = 3e-4
@@ -104,11 +45,11 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
         # Approximator
         actor_input_shape = mdp.info.observation_space.shape
         actor_mu_params = dict(network=ActorNetwork,
-                               n_features=n_features,
+                               n_features=actor_n_features,
                                input_shape=actor_input_shape,
                                output_shape=mdp.info.action_space.shape)
         actor_sigma_params = dict(network=ActorNetwork,
-                                  n_features=n_features,
+                                  n_features=actor_n_features,
                                   input_shape=actor_input_shape,
                                   output_shape=mdp.info.action_space.shape)
 
@@ -120,7 +61,7 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
                              optimizer={'class': optim.Adam,
                                         'params': {'lr': 1e-4}},
                              loss=F.mse_loss,
-                             n_features=n_features,
+                             n_features=critic_n_features,
                              input_shape=critic_input_shape,
                              output_shape=(1,))
 
