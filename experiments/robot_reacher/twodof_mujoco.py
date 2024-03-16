@@ -15,7 +15,10 @@ class TwoDofMujoco(Environment):
         observation \in R^{8} = [q1, q2, x_tcp, y_tcp, dq1, dq2, (x_tcp - x_target), (y_tcp - y_target)]
 
     """
-    def __init__(self, xml_file, gamma=0.99, horizon=300, dt=1e-2, timestep=None, n_substeps=1, n_intermediate_steps=1):
+    def __init__(self, xml_file='/home/kika/path/iros2024/generalized_atacom_envs/experiments/robot_reacher/twodof.xml',
+                  gamma=0.99, horizon=300, dt=1e-2, timestep=None, n_substeps=1, n_intermediate_steps=1, debug_gui=False):
+        
+        print("vec_env: ", self)
         # Create the simulation
         self._model = mujoco.MjModel.from_xml_path(xml_file)
         self._data = mujoco.MjData(self._model)
@@ -39,6 +42,7 @@ class TwoDofMujoco(Environment):
         super().__init__(mdp_info)
 
         # Visualization
+        self.debug_gui = debug_gui
         self._viewer_params = dict(default_camera_mode="top_static", camera_params=dict(top_static=dict(distance=1.0, elevation=-90.0, azimuth=90.0, lookat=np.array([0.0, 0.0, 0.0]))))
         self._viewer = None
 
@@ -127,6 +131,8 @@ class TwoDofMujoco(Environment):
         for i in range(2):
             if np.pi - np.abs(self.x[i]) < 0.01 * np.pi:
                 absorbing = True
+                reward = -100
+                break
 
         observation = self._get_observation()
         return observation, reward, absorbing, {}
@@ -136,15 +142,17 @@ class TwoDofMujoco(Environment):
         tcp_position = self.fk(self.x[[0,1]])[0][:2]
 
         vec = tcp_position - target_position
-        reward_dist = -np.linalg.norm(vec)
-        reward_ctrl = -np.square(action).sum()
+        reward_dist = -np.linalg.norm(vec)      * 1.0
+        reward_ctrl = -np.square(action).sum()  * 0.1 
         reward = reward_dist + reward_ctrl
         return reward
 
     def render(self, record=False):
-        if self._viewer is None:
-            self._viewer = MujocoViewer(self._model, self.dt, record=record, **self._viewer_params)
-        return self._viewer.render(self._data, record)
+        if self.debug_gui:
+            if self._viewer is None:
+                self._viewer = MujocoViewer(self._model, self.dt, record=record, **self._viewer_params)
+            return self._viewer.render(self._data, record)
+        return {}
 
     def stop(self):
         if self._viewer is not None:
