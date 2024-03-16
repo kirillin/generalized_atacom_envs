@@ -44,6 +44,7 @@ class TwoDofMujoco(Environment):
         if np.linalg.norm([x,y]) > min_radius:
             # set target marker in simulation
             self._data.qpos[[2,3]] = [x,y]
+            self._data.qvel[[2,3]] = [0,0]
             mujoco.mj_forward(self._model, self._data)
             return True
         return False
@@ -67,23 +68,32 @@ class TwoDofMujoco(Environment):
         return observation
 
     def reset(self, state=None):
-        # Reset simulation
-        mujoco.mj_resetData(self._model, self._data)
+        
+        # set initial state
+        self.x = np.zeros(8)
 
-        if self._viewer is not None:
-            self._viewer.load_new_model(self._model)
-
-        # add noise to state
+        # Add noise to state
         self.x[0] = self.x[0] + np.random.uniform(low=-0.1, high=0.1) # position noise
         self.x[1] = self.x[1] + np.random.uniform(low=-0.1, high=0.1)
         self.x[4] = self.x[4] + np.random.uniform(low=-0.005, high=0.005) # velocity noise
         self.x[5] = self.x[5] + np.random.uniform(low=-0.005, high=0.005)
+
+        # Reset simulation
+        mujoco.mj_resetData(self._model, self._data)
+        self._data.qpos[:] = np.copy(self.x[:4])
+        self._data.qvel[:] = np.copy(self.x[4:])
 
         # New target
         suc = False
         while not suc:  # generate target non close to a robot base
             self.target_q = np.random.uniform(-np.pi, np.pi, size=2) # generate a new target
             suc = self.set_target(self.target_q)
+
+        # apply initial for simulator
+        mujoco.mj_forward(self._model, self._data)
+        
+        if self._viewer is not None:
+            self._viewer.load_new_model(self._model)
 
         # Reset observation
         observation = self._get_observation()
@@ -164,7 +174,7 @@ def test():
             np.pi * np.sin(t), 
             0.9 * np.pi * np.sin(t)]
         )
-        twodof.set_target(q_des, min_radius=0.03)
+        # twodof.set_target(q_des, min_radius=0.03)
 
         q = np.array(twodof.x[[0,1]])
         dq = np.array(twodof.x[[4,5]])
@@ -173,7 +183,7 @@ def test():
         twodof.step(u)
         twodof.render()
 
-        if t > 1.:
+        if t > 2.:
             t0 = time.time()
             twodof.reset()
 
