@@ -9,8 +9,7 @@ from mushroom_rl.algorithms.actor_critic import SAC
 from mushroom_rl.core import Core, Logger
 from mushroom_rl.utils import TorchUtils
 
-# from onedof import OneDof
-from twodof_mujoco import TwoDofMujoco
+from reacher_mujoco import TwoDofMujoco
 
 from tqdm import trange
 
@@ -81,7 +80,9 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
     # MDP
     # path = '/home/kika/path/iros2024/generalized_atacom_envs/experiments/robot_reacher'
     path = '/home/human/artemov/generalized_atacom_envs/experiments/robot_reacher'
-    mdp = TwoDofMujoco(f"{path}/twodof.xml")
+    xml_file = f'{path}/onedof.xml'
+
+    mdp = TwoDofMujoco(xml_file)
 
     # Settings
     initial_replay_size = 256
