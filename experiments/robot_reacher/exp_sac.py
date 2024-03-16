@@ -113,13 +113,21 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load, params):
 
             logger.epoch_info(n+1, J=J, R=R, entropy=E)
 
+            avg_dist = core.env.get_avg_dist()
+
+            writer.add_scalar("charts/discounted_return", J, n)
+            writer.add_scalar("charts/undiscounted_return", R, n)
+            writer.add_scalar("charts/agent_policy_entropy", E, n)
+            writer.add_scalar("charts/avg_dist", avg_dist, n)
+
             if save:
                 logger.log_best_agent(agent, J)
 
         logger.info('Press a button to visualize pendulum')
         input()
         core.evaluate(n_episodes=5, render=True)
-
+    
+    writer.close()
 
 if __name__ == '__main__':
     import argparse
@@ -146,6 +154,6 @@ if __name__ == '__main__':
         save = False
         load = True
 
-    experiment(alg=SAC, n_epochs=15, n_steps=1000, n_steps_test=1000, 
+    experiment(alg=SAC, n_epochs=30, n_steps=1000, n_steps_test=1000, 
                save=save, load=load,
                params=dict(xml_file=xml_file, network=network))

@@ -52,6 +52,15 @@ class TwoDofMujoco(Environment):
         self._viewer_params = dict(default_camera_mode="top_static", camera_params=dict(top_static=dict(distance=1.0, elevation=-90.0, azimuth=90.0, lookat=np.array([0.0, 0.0, 0.0]))))
         self._viewer = None
 
+        # memory.
+        self.sum = 0
+        self.count = 0        
+
+    def get_avg_dist(self):
+        if self.count > 0:
+            return self.sum / self.count
+        return np.inf
+
     def seed(self, seed):
         np.random.seed(seed)
 
@@ -132,9 +141,7 @@ class TwoDofMujoco(Environment):
         # generate a new target
         self.target_q = np.random.uniform(low_limits, high_limits)
         suc = self.set_target(self.target_q)
-
-        # self._model.geom('target').rgba = np.array([0. , 1, 0, 1. ], dtype=np.float32)
-
+        
         # apply initial for simulator
         mujoco.mj_forward(self._model, self._data)
 
@@ -143,6 +150,10 @@ class TwoDofMujoco(Environment):
 
         # Reset observation
         observation = self._get_observation()
+
+        # avg dist stuff
+        self.sum = 0
+        self.count = 0
 
         return observation, {}
 
@@ -185,6 +196,19 @@ class TwoDofMujoco(Environment):
         reward_dist = -np.linalg.norm(vec)      * 1.0
         reward_ctrl = -np.square(action).sum()  * 0.1 
         reward = reward_dist + reward_ctrl
+
+        # target color
+        scale = 1 / (0.1 * self.nq + 0.01)
+        self._model.geom('target').rgba = np.array([ 
+                abs(np.sin(reward_dist * scale)) * 2,
+                abs(np.cos(reward_dist * scale)) * 2,
+                0, 
+                0.9 ], dtype=np.float32)
+
+        # avg dist stuff
+        self.sum += -reward_dist
+        self.count += 1
+
         return reward
 
     def render(self, record=False):
