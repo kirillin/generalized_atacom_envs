@@ -3,18 +3,27 @@ import numpy as np
 from dm_control import mjcf
 from mushroom_rl.core import Environment, MDPInfo
 from mushroom_rl.rl_utils.spaces import Box
-from mushroom_rl.utils.mujoco import *
-from mushroom_rl.utils.viewer import Viewer
+# from mushroom_rl.utils.mujoco import *
+from mushroom_rl.utils.mujoco import MujocoViewer
 
 
 class TwoDofMujoco(Environment):
 
-    def __init__(self, xml_file, gamma=0.99, horizon=300, dt=1e-2):
+    def __init__(self, xml_file, gamma=0.99, horizon=300, dt=1e-2, timestep=None, n_substeps=1, n_intermediate_steps=1):
         # Create the simulation
         self._model = mujoco.MjModel.from_xml_path(xml_file)
         self._data = mujoco.MjData(self._model)
 
         self.x = np.concatenate([self._data.qpos.flat, self._data.qvel.flat])
+
+        # time stuff
+        if timestep is not None:
+            self._model.opt.timestep = timestep
+            self._timestep = timestep
+        else:
+            self._timestep = self._model.opt.timestep
+        self._n_intermediate_steps = n_intermediate_steps
+        self._n_substeps = n_substeps
 
         # Observation space and Action space
         observation_space = Box(-np.inf, np.inf, shape=(10,))
@@ -24,20 +33,20 @@ class TwoDofMujoco(Environment):
         super().__init__(mdp_info)
 
         # Visualization
-        self._viewer = Viewer(4, 4)
+        self._viewer_params = dict(default_camera_mode="top_static", camera_params=dict(top_static=dict(distance=1.0, elevation=-90.0, azimuth=90.0, lookat=np.array([0.0, 0.0, 0.0]))))
+        self._viewer = None
 
     def seed(self, seed):
         np.random.seed(seed)
 
-    def set_target(self, q):
-        # TODO check for a base frame?
+    def set_target(self, q, min_radius=0.03):
         x, y = self.fk(q)[0][:2]
-
-        # set target marker in simulation
-        self._data.qpos[[2,3]] = [x,y]
-        mujoco.mj_forward(self._model, self._data)
-        # self._data.joint('target_x').qpos = x
-        # self._data.joint('target_y').qpos = y
+        if np.linalg.norm([x,y]) > min_radius:
+            # set target marker in simulation
+            self._data.qpos[[2,3]] = [x,y]
+            mujoco.mj_forward(self._model, self._data)
+            return True
+        return False
     
     def _get_observation(self):
         # x \in R^{8}:
@@ -61,33 +70,41 @@ class TwoDofMujoco(Environment):
         # Reset simulation
         mujoco.mj_resetData(self._model, self._data)
 
+        if self._viewer is not None:
+            self._viewer.load_new_model(self._model)
+
         # add noise to state
         self.x[0] = self.x[0] + np.random.uniform(low=-0.1, high=0.1) # position noise
-        self.x[1] = self.x[1] + np.random.uniform(low=-0.005, high=0.005) # velocity noise
+        self.x[1] = self.x[1] + np.random.uniform(low=-0.1, high=0.1)
+        self.x[4] = self.x[4] + np.random.uniform(low=-0.005, high=0.005) # velocity noise
+        self.x[5] = self.x[5] + np.random.uniform(low=-0.005, high=0.005)
 
         # New target
-        self.target_q = np.random.uniform(-np.pi, np.pi, size=2) # generate new target
-        self.set_target(self.target_q)
+        suc = False
+        while not suc:  # generate target non close to a robot base
+            self.target_q = np.random.uniform(-np.pi, np.pi, size=2) # generate a new target
+            suc = self.set_target(self.target_q)
 
         # Reset observation
         observation = self._get_observation()
-        
+
         return observation, {}
-    
+
     def step(self, action):
         # do simulation
-        action = self._bound(action, -1, 1)         # bound action
-        self._data.ctrl[[0,1]] = action               # apply action
-        mujoco.mj_step(self._model, self._data, 1)  # sim. step
+        action = self._bound(action, -1, 1)             # bound action
+        self._data.ctrl[[0,1]] = action                 # apply action
+        mujoco.mj_step(self._model, self._data, 1)      # sim. step
 
-        # x \in R^{8} = [q1, q2, x_target, y_target, 
-        #                dq1, dq2, dx_target, dy_target]
+        # x \in R^{8} = [q1, q2, x_target, y_target, dq1, dq2, dx_target, dy_target]
         self.x = np.concatenate([self._data.qpos.flat, self._data.qvel.flat])
-        # print(self.x[[2,3]])
 
         # compute reward
         reward = self._get_reward(action)
+        
         absorbing = False
+
+        # check if it's close to a joint limit
         for i in range(2):
             if np.pi - np.abs(self.x[i]) < 0.01 * np.pi:
                 absorbing = True
@@ -106,67 +123,60 @@ class TwoDofMujoco(Environment):
         return reward
 
     def render(self, record=False):
-        _tcp = 2. * np.ones(2)
-        _target = 2. * np.ones(2)
-        
-        start = 2. * np.ones(2)
-        end = 1 * np.ones(2)
-        end2 = 1 * np.ones(2)
-
-        end[0] = 1 * np.cos(self.x[0])
-        end[1] = 1 * np.sin(self.x[0])
-        self._viewer.circle(start, 1, color=(100, 100, 100), width=1)
-
-        end2[0] = 1 * np.cos(self.x[0]+self.x[1])
-        end2[1] = 1 * np.sin(self.x[0]+self.x[1])
-        self._viewer.circle(end + start, 1, color=(100, 100, 100), width=1)
-
-        self._viewer.line(start, end + start, color=(255, 255, 0), width=4)
-        self._viewer.line(end + start, end + start + end2, color=(255, 255, 0), width=2)
-
-        self._viewer.circle(end + start + end2, 0.1, color=(255, 255, 0), width=2)
-
-        _tcp   += self.fk(self.x[[0,1]])[0][:2] * 10
-        _target += self.x[[2,3]] * 10
-
-        self._viewer.circle(_tcp, 0.05, color=(255, 0, 0), width=4)
-        self._viewer.circle(_target, 0.05, color=(0, 255, 0), width=2)
-        
-        frame = self._viewer.get_frame() if record else None
-        self._viewer.display(self.info.dt)
-        return frame
-
+        if self._viewer is None:
+            self._viewer = MujocoViewer(self._model, self.dt, record=record, **self._viewer_params)
+        return self._viewer.render(self._data, record)
 
     def stop(self):
-        self._viewer.close()
+        if self._viewer is not None:
+            self._viewer.stop()
+            del self._viewer
+            self._viewer = None
 
     def fk(self, q, body_name='fingertip'):
         self._data.qpos[:len(q)] = q
         mujoco.mj_fwdPosition(self._model, self._data)
         return self._data.body(body_name).xpos.copy(), self._data.body(body_name).xmat.reshape(3, 3).copy()
 
+    @property
+    def dt(self):
+        return self._timestep * self._n_intermediate_steps * self._n_substeps
 
 def test():
+    import time
     xml_file = '/home/kika/path/iros2024/generalized_atacom_envs/experiments/robot_reacher/twodof.xml'
-    towdof = TwoDofMujoco(xml_file)
+
+    twodof = TwoDofMujoco(xml_file, )
     
-    q = np.array(towdof.x[[0,1]])
-    dq = np.array(towdof.x[[4,5]])
+    q = np.array(twodof.x[[0,1]])
+    dq = np.array(twodof.x[[4,5]])
+
+    twodof.reset()
 
     q_des = np.array([0., 0.])
-    towdof.reset()
+    twodof.set_target(q_des, min_radius=0.03)
 
+    t0 = time.time()
     while True:
+        t = time.time() - t0
 
-        q = np.array(towdof.x[[0,1]])
-        dq = np.array(towdof.x[[4,5]])
+        q_des = np.array([
+            np.pi * np.sin(t), 
+            0.9 * np.pi * np.sin(t)]
+        )
+        twodof.set_target(q_des, min_radius=0.03)
+
+        q = np.array(twodof.x[[0,1]])
+        dq = np.array(twodof.x[[4,5]])
         u = 1. * (q_des - q) - 0.2 * dq
-        q_des += np.array([0.,0.01]) 
         
-        towdof.step(u)
-        towdof.render()
+        twodof.step(u)
+        twodof.render()
+
+        if t > 1.:
+            t0 = time.time()
+            twodof.reset()
 
 
 if __name__ == '__main__':
     test()
-        
