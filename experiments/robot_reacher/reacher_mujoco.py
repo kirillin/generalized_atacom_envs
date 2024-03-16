@@ -10,13 +10,13 @@ from mushroom_rl.utils.mujoco import MujocoViewer
 
 class TwoDofMujoco(Environment):
     """
-        x = state \in R^{4} = [q1, q2, x_target, y_target dq1, dq2, dx_target, dy_target]
+        x = state \in R^{2*nq+4} = [q1, q2, x_target, y_target dq1, dq2, dx_target, dy_target]
             where q -- robot, x_target,y_target -- target 
 
-        observation \in R^{8} = [q1, q2, x_tcp, y_tcp, dq1, dq2, (x_tcp - x_target), (y_tcp - y_target)]
+        observation \in R^{2*nq+nq+4} = [q1, q2, x_tcp, y_tcp, dq1, dq2, (x_tcp - x_target), (y_tcp - y_target)]
 
     """
-    def __init__(self, xml_file='/home/kika/path/iros2024/generalized_atacom_envs/experiments/robot_reacher/onedof.xml',
+    def __init__(self, xml_file='/home/kika/path/iros2024/generalized_atacom_envs/experiments/robot_reacher/assests/onedof.xml',
                   gamma=0.99, horizon=300, dt=1e-2, timestep=None, n_substeps=1, n_intermediate_steps=1, debug_gui=True):
 
         print("vec_env: ", self)
@@ -107,6 +107,7 @@ class TwoDofMujoco(Environment):
         # set initial state
         if state == None:
             self.x = np.zeros(self.nx)
+            self.x[:self.nq] = [0.5] * self.nq
         else:
             self.x = state
 
@@ -211,7 +212,7 @@ class TwoDofMujoco(Environment):
 
 def test():
     import time
-    path = '/home/kika/path/iros2024/generalized_atacom_envs/experiments/robot_reacher'
+    path = '/home/kika/path/iros2024/generalized_atacom_envs/experiments/robot_reacher/assests'
     xml_file = f'{path}/onedof.xml'
     # xml_file = f'{path}/twodof.xml'
     # xml_file = f'{path}/threedof.xml'

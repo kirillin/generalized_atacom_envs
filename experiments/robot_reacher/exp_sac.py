@@ -13,29 +13,41 @@ from reacher_mujoco import TwoDofMujoco
 
 from tqdm import trange
 
-from nn import SimpleActorNetwork as ActorNetwork
-from nn import SimpleCriticNetwork as CriticNetwork
+import time
+from torch.utils.tensorboard import SummaryWriter
+
+# from nn import SimpleActorNetwork as ActorNetwork
+# from nn import SimpleCriticNetwork as CriticNetwork
+
+from nn import SACActorNetwork as ActorNetwork
+from nn import SACCriticNetwork as CriticNetwork
 
 
-def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
+def experiment(alg, n_epochs, n_steps, n_steps_test, save, load, params):
+    xml_file = params['xml_file']
+    al, cl, af, cf = map(int, params['network'])
+
+    run_name = f"reacher__a{al}_{af}_c{cl}_{cf}__{int(time.time())}"
+    writer = SummaryWriter(f"runs/{run_name}")
+    writer.add_text(
+        "reacher_test",
+        ""
+    )
     np.random.seed()
 
-    logger = Logger(alg.__name__, results_dir='./logs' if save else None)
+    logger = Logger(alg.__name__, results_dir='./logs/reacher__a{al}_{af}_c{cl}_{cf}' if save else None)
     logger.strong_line()
     logger.info('Experiment Algorithm: ' + alg.__name__)
 
     # MDP
-    # path = '/home/kika/path/iros2024/generalized_atacom_envs/experiments/robot_reacher'
-    path = '/home/human/artemov/generalized_atacom_envs/experiments/robot_reacher'
-    xml_file = f'{path}/onedof.xml'
-
     mdp = TwoDofMujoco(xml_file)
 
     # Settings
-    initial_replay_size = 256
+    initial_replay_size = af
     max_replay_size = 50000
-    batch_size = 256
-    n_features = [256,256,256]
+    batch_size = af
+    actor_n_features = [af] * al
+    critic_n_features = [cf] * cl
     warmup_transitions = 100
     tau = 0.002
     lr_alpha = 3e-4
@@ -46,11 +58,11 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
         # Approximator
         actor_input_shape = mdp.info.observation_space.shape
         actor_mu_params = dict(network=ActorNetwork,
-                               n_features=n_features,
+                               n_features=actor_n_features,
                                input_shape=actor_input_shape,
                                output_shape=mdp.info.action_space.shape)
         actor_sigma_params = dict(network=ActorNetwork,
-                                  n_features=n_features,
+                                  n_features=actor_n_features,
                                   input_shape=actor_input_shape,
                                   output_shape=mdp.info.action_space.shape)
 
@@ -62,7 +74,7 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
                              optimizer={'class': optim.Adam,
                                         'params': {'lr': 1e-4}},
                              loss=F.mse_loss,
-                             n_features=n_features,
+                             n_features=critic_n_features,
                              input_shape=critic_input_shape,
                              output_shape=(1,))
 
@@ -116,14 +128,24 @@ if __name__ == '__main__':
     parser.add_argument('-e', '--eval', action='store_true')
     args = parser.parse_args()
 
-    TorchUtils.set_default_device('cpu')
+    TorchUtils.set_default_device('cuda')
 
-    if args.learn:
-        save = True
-        load = False
-        experiment(alg=SAC, n_epochs=100, n_steps=1000, n_steps_test=1000, save=save, load=load)
+    robotfile = 'onedof.xml'
+
+    # path = '/home/kika/path/iros2024/generalized_atacom_envs/experiments/robot_reacher/assests'
+    path = '/home/human/artemov/generalized_atacom_envs/experiments/robot_reacher/assests'
+
+    xml_file = f'{path}/{robotfile}'
+
+    network = [1,1,256,256]
+
+    save = True
+    load = False
 
     if args.eval:
         save = False
         load = True
-        experiment(alg=SAC, n_epochs=100, n_steps=1000, n_steps_test=1000, save=save, load=load)
+
+    experiment(alg=SAC, n_epochs=15, n_steps=1000, n_steps_test=1000, 
+               save=save, load=load,
+               params=dict(xml_file=xml_file, network=network))
