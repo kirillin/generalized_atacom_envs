@@ -136,16 +136,24 @@ if __name__ == '__main__':
     parser.add_argument('-e', '--eval', action='store_true')
     args = parser.parse_args()
 
-    TorchUtils.set_default_device('cuda')
+    TorchUtils.set_default_device('cpu')
 
     robotfile = 'onedof.xml'
 
-    # path = '/home/kika/path/iros2024/generalized_atacom_envs/experiments/robot_reacher/assests'
-    path = '/home/human/artemov/generalized_atacom_envs/experiments/robot_reacher/assests'
+    path = '/home/kika/path/iros2024/generalized_atacom_envs/experiments/robot_reacher/assests'
+    # path = '/home/human/artemov/generalized_atacom_envs/experiments/robot_reacher/assests'
 
     xml_file = f'{path}/{robotfile}'
 
-    network = [1,1,256,256]
+
+    # actor critic
+    networks = [
+        [1,1,256,256],
+        [2,2,256,256],
+        [3,3,256,256],
+        [3,6,256,256],
+        [1,1,512,512]
+    ]
 
     save = True
     load = False
@@ -154,6 +162,7 @@ if __name__ == '__main__':
         save = False
         load = True
 
-    experiment(alg=SAC, n_epochs=30, n_steps=1000, n_steps_test=1000, 
-               save=save, load=load,
-               params=dict(xml_file=xml_file, network=network))
+    for network in networks:
+        experiment(alg=SAC, n_epochs=40, n_steps=1000, n_steps_test=1000, 
+                save=save, load=load,
+                params=dict(xml_file=xml_file, network=network))

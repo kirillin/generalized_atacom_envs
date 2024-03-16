@@ -39,10 +39,16 @@ class TwoDofMujoco(Environment):
         self._n_intermediate_steps = n_intermediate_steps
         self._n_substeps = n_substeps
 
+        low_action = self._model.actuator_ctrlrange[:,0]
+        high_action = self._model.actuator_ctrlrange[:,1]
+        low_action[ low_action == 0.] = -np.inf
+        high_action[ high_action == 0.] = np.inf
+
         # Observation space and Action space
         observation_shape = (4 + self.nq + self.nq * 2, )
         observation_space = Box(-np.inf, np.inf, shape=observation_shape)
         action_space =  Box(-1, 1, shape=(1,))
+        action_space =  Box(low_action, high_action)
 
         mdp_info = MDPInfo(observation_space, action_space, gamma, horizon, dt)
         super().__init__(mdp_info)
