@@ -14,13 +14,23 @@ from onedof_with_limits import OneDof
 
 from tqdm import trange
 
+import time
+from torch.utils.tensorboard import SummaryWriter
 
 from nn import SACActorNetwork as ActorNetwork
 from nn import SACCriticNetwork as CriticNetwork
 
 
 def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
+    run_name = f"onedof__{int(time.time())}"
+    writer = SummaryWriter(f"runs/{run_name}")
+    writer.add_text(
+        "onedof_test",
+        ""
+    )
+
     np.random.seed()
+    
 
     logger = Logger(alg.__name__, results_dir='./logs' if save else None)
     logger.strong_line()
@@ -30,11 +40,11 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
     mdp = OneDof()
 
     # Settings
-    initial_replay_size = 256
+    initial_replay_size = 64
     max_replay_size = 50000
-    batch_size = 256
-    actor_n_features = [256]
-    critic_n_features = [256,256]
+    batch_size = 64
+    actor_n_features = [64]
+    critic_n_features = [64]
     warmup_transitions = 100
     tau = 0.005
     lr_alpha = 3e-4
@@ -99,14 +109,19 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
             E = agent.policy.entropy(dataset.state)
 
             logger.epoch_info(n+1, J=J, R=R, entropy=E)
-
+            print('epoch!')
+            writer.add_scalar("charts/discounted_return", J, n)
+            writer.add_scalar("charts/undiscounted_return", R, n)
+            writer.add_scalar("charts/agent_policy_entropy", E, n)
+            
             if save:
                 logger.log_best_agent(agent, J)
 
         logger.info('Press a button to visualize pendulum')
         input()
         core.evaluate(n_episodes=5, render=True)
-
+    
+    writer.close()
 
 if __name__ == '__main__':
     import argparse
@@ -115,14 +130,14 @@ if __name__ == '__main__':
     parser.add_argument('-e', '--eval', action='store_true')
     args = parser.parse_args()
 
-    TorchUtils.set_default_device('cpu')
+    TorchUtils.set_default_device('cuda')
 
     if args.learn:
-        save = False
+        save = True
         load = False
         experiment(alg=SAC, n_epochs=100, n_steps=1000, n_steps_test=500, save=save, load=load)
 
     if args.eval:
         save = False
         load = True
-        experiment(alg=SAC, n_epochs=20, n_steps=1000, n_steps_test=500, save=save, load=load)
+        experiment(alg=SAC, n_epochs=100, n_steps=1000, n_steps_test=500, save=save, load=load)
