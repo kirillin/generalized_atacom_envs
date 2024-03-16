@@ -17,7 +17,7 @@ class TwoDofMujoco(Environment):
 
     """
     def __init__(self, xml_file='/home/kika/path/iros2024/generalized_atacom_envs/experiments/robot_reacher/assests/onedof.xml',
-                  gamma=0.99, horizon=300, dt=1e-2, timestep=None, n_substeps=1, n_intermediate_steps=1, debug_gui=True):
+                  gamma=0.97, horizon=300, dt=1e-2, timestep=None, n_substeps=1, n_intermediate_steps=1, debug_gui=True):
 
         print("vec_env: ", self)
         # Create the simulation
@@ -31,13 +31,16 @@ class TwoDofMujoco(Environment):
         self.nx = self.x.size
 
         # time stuff
-        if timestep is not None:
-            self._model.opt.timestep = timestep
-            self._timestep = timestep
-        else:
-            self._timestep = self._model.opt.timestep
-        self._n_intermediate_steps = n_intermediate_steps
-        self._n_substeps = n_substeps
+        self.dt = dt
+        self._model.opt.timestep = self.dt
+        # self._timestep = timestep
+        # if timestep is not None:
+        #     self._model.opt.timestep = timestep
+        #     self._timestep = timestep
+        # else:
+        #     self._timestep = self._model.opt.timestep
+        # self._n_intermediate_steps = n_intermediate_steps
+        # self._n_substeps = n_substeps
 
         low_action = self._model.actuator_ctrlrange[:,0]
         high_action = self._model.actuator_ctrlrange[:,1]
@@ -47,10 +50,10 @@ class TwoDofMujoco(Environment):
         # Observation space and Action space
         observation_shape = (4 + self.nq + self.nq * 2, )
         observation_space = Box(-np.inf, np.inf, shape=observation_shape)
-        action_space =  Box(-1, 1, shape=(1,))
+        # action_space =  Box(-1, 1, shape=(1,))
         action_space =  Box(low_action, high_action)
 
-        mdp_info = MDPInfo(observation_space, action_space, gamma, horizon, dt)
+        mdp_info = MDPInfo(observation_space, action_space, gamma, horizon, self.dt)
         super().__init__(mdp_info)
 
         # Visualization
@@ -71,7 +74,7 @@ class TwoDofMujoco(Environment):
         np.random.seed(seed)
 
     def get_state_q(self):
-        return self.x[:self.nq]
+        return self.x[:self.nq].copy()
 
     def get_state_dq(self):
         return self.x[self.nq + 2 : 2 * self.nq + 2].copy()
@@ -119,10 +122,10 @@ class TwoDofMujoco(Environment):
 
     def reset(self, state=None):
 
-        # set initial state
+        # reset initial state
         if state == None:
             self.x = np.zeros(self.nx)
-            self.x[:self.nq] = [0.5] * self.nq
+            self.x[:self.nq] = [-np.pi/8] * self.nq
         else:
             self.x = state
 
@@ -130,7 +133,7 @@ class TwoDofMujoco(Environment):
         for i in range(self.nq):
             self.x[i] = self.x[i] + np.random.uniform(low=-0.1, high=0.1) # position noise
 
-            offset = i + self.nq + 2
+            offset = int(self.nx // 2 + i)
             self.x[offset] = self.x[offset] + np.random.uniform(low=-0.005, high=0.005) # velocity noise
 
         # Reset simulation
@@ -138,24 +141,24 @@ class TwoDofMujoco(Environment):
         self._data.qpos[:] = np.copy(self.x[: self.nx // 2])
         self._data.qvel[:] = np.copy(self.x[self.nx // 2 :])
 
+        # apply initial for simulator
+        mujoco.mj_forward(self._model, self._data)
+
         # New target
-        suc = False
+        # suc = False
         # while not suc:  # generate target non close to a robot base
         # extract limits form model
         low_limits, high_limits = self.get_jnt_limmits()
-
         # generate a new target
         self.target_q = np.random.uniform(low_limits, high_limits)
         suc = self.set_target(self.target_q)
         
-        # apply initial for simulator
-        mujoco.mj_forward(self._model, self._data)
-
         if self._viewer is not None:
             self._viewer.load_new_model(self._model)
 
         # Reset observation
         observation = self._get_observation()
+        self._state = observation #???
 
         # avg dist stuff
         self.sum = 0
@@ -173,7 +176,8 @@ class TwoDofMujoco(Environment):
 
         action = self._bound(action, low_action, high_action) # bound action
         self._data.ctrl[:self.nu] = action.copy()                 # apply action
-        mujoco.mj_step(self._model, self._data, 1)      # sim. step
+        # mujoco.mj_step(self._model, self._data, nstep=2)      # sim. step
+        mujoco.mj_step(self._model, self._data)      # sim. step
 
         # x \in R^{8} = [q1, q2, x_target, y_target, dq1, dq2, dx_target, dy_target]
         self.x = np.concatenate([self._data.qpos.flat.copy(), self._data.qvel.flat.copy()])
@@ -188,10 +192,11 @@ class TwoDofMujoco(Environment):
             low_limit, high_limit = self.get_jnt_limmits()
             if not (low_limit[i] <= self.x[i] <=  high_limit[i]):
                 absorbing = True
-                reward = -100
+                # reward = -100
                 break
 
         observation = self._get_observation()
+        self._state = observation #???
         return observation, reward, absorbing, {}
 
     def _get_reward(self, action):
@@ -204,12 +209,13 @@ class TwoDofMujoco(Environment):
         reward = reward_dist + reward_ctrl
 
         # target color
-        scale = 1 / (0.1 * self.nq + 0.01)
-        self._model.geom('target').rgba = np.array([ 
-                abs(np.sin(reward_dist * scale)) * 2,
-                abs(np.cos(reward_dist * scale)) * 2,
-                0, 
-                0.9 ], dtype=np.float32)
+        if self._viewer is not None:
+            scale = 1 / (0.1 * self.nq + 0.01)
+            self._model.geom('target').rgba = np.array([ 
+                    abs(np.sin(reward_dist * scale)) * 2,
+                    abs(np.cos(reward_dist * scale)) * 2,
+                    0, 
+                    0.9 ], dtype=np.float32)
 
         # avg dist stuff
         self.sum += -reward_dist
@@ -231,14 +237,13 @@ class TwoDofMujoco(Environment):
             self._viewer = None
 
     def fk(self, q, body_name='fingertip'):
-        # print(q)
         self._data.qpos[:self.nq] = q
         mujoco.mj_fwdPosition(self._model, self._data)
         return self._data.body(body_name).xpos.copy(), self._data.body(body_name).xmat.reshape(3, 3).copy()
 
-    @property
-    def dt(self):
-        return self._timestep * self._n_intermediate_steps * self._n_substeps
+    # @property
+    # def dt(self):
+    #     return self._timestep * self._n_intermediate_steps * self._n_substeps
 
 def test():
     import time

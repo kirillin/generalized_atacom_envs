@@ -6,6 +6,8 @@ import torch.nn.functional as F
 class SimpleCriticNetwork(nn.Module):
     def __init__(self, input_shape, output_shape, n_features, **kwargs):
         super().__init__()
+        
+        n_features = n_features[0]
 
         n_input = input_shape[-1]
         n_output = output_shape[0]
@@ -45,6 +47,7 @@ class SimpleActorNetwork(nn.Module):
     def __init__(self, input_shape, output_shape, n_features, **kwargs):
         super(SimpleActorNetwork, self).__init__()
 
+        n_features = n_features[0]
         n_input = input_shape[-1]
         n_output = output_shape[0]
 

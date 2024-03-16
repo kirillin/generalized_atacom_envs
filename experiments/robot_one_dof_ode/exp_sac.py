@@ -21,8 +21,11 @@ from nn import SACActorNetwork as ActorNetwork
 from nn import SACCriticNetwork as CriticNetwork
 
 
-def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
-    run_name = f"onedof__{int(time.time())}"
+def experiment(alg, n_epochs, n_steps, n_steps_test, save, load, params):
+    al, cl, af, cf = map(int, params['network'])
+
+    run_name = f"onedof__a{al}_{af}_c{cl}_{cf}__{int(time.time())}"
+
     writer = SummaryWriter(f"runs/{run_name}")
     writer.add_text(
         "onedof_test",
@@ -30,9 +33,8 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
     )
 
     np.random.seed()
-    
 
-    logger = Logger(alg.__name__, results_dir='./logs' if save else None)
+    logger = Logger(alg.__name__, results_dir=f'./logs/onedof__a{al}_{af}_c{cl}_{cf}' if save else None)
     logger.strong_line()
     logger.info('Experiment Algorithm: ' + alg.__name__)
 
@@ -40,13 +42,13 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
     mdp = OneDof()
 
     # Settings
-    initial_replay_size = 64
-    max_replay_size = 50000
-    batch_size = 64
-    actor_n_features = [64]
-    critic_n_features = [64]
-    warmup_transitions = 100
-    tau = 0.005
+    initial_replay_size = af
+    max_replay_size = 100000
+    batch_size = af
+    actor_n_features = [af] * al
+    critic_n_features = [cf] * cl
+    warmup_transitions = 1000
+    tau = 0.002
     lr_alpha = 3e-4
 
     if load:
@@ -107,19 +109,21 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
             J = np.mean(dataset.discounted_return)
             R = np.mean(dataset.undiscounted_return)
             E = agent.policy.entropy(dataset.state)
+            avg_dist = core.env.get_avg_dist()
 
-            logger.epoch_info(n+1, J=J, R=R, entropy=E)
-            print('epoch!')
+            logger.epoch_info(n+1, J=J, R=R, entropy=E, avg_dist=avg_dist)
+            
             writer.add_scalar("charts/discounted_return", J, n)
             writer.add_scalar("charts/undiscounted_return", R, n)
             writer.add_scalar("charts/agent_policy_entropy", E, n)
-            
+            writer.add_scalar("charts/avg_dist", avg_dist, n)
+
             if save:
                 logger.log_best_agent(agent, J)
 
-        logger.info('Press a button to visualize pendulum')
-        input()
-        core.evaluate(n_episodes=5, render=True)
+        # logger.info('Press a button to visualize pendulum')
+        # input()
+        # core.evaluate(n_episodes=5, render=True)
     
     writer.close()
 
@@ -132,12 +136,26 @@ if __name__ == '__main__':
 
     TorchUtils.set_default_device('cuda')
 
-    if args.learn:
-        save = True
-        load = False
-        experiment(alg=SAC, n_epochs=100, n_steps=1000, n_steps_test=500, save=save, load=load)
+    # actor critic
+    networks = [
+        [1,1,256,256],
+        [2,2,256,256],
+        [3,3,256,256],
+        [3,6,256,256],
+        [1,1,512,512],
+        [2,2,512,512],
+        [3,3,512,512],
+        [3,6,512,512],
+    ]
+
+    save = True
+    load = False
 
     if args.eval:
         save = False
         load = True
-        experiment(alg=SAC, n_epochs=100, n_steps=1000, n_steps_test=500, save=save, load=load)
+
+    for network in networks:
+        experiment(alg=SAC, n_epochs=100, n_steps=1000, n_steps_test=1000, 
+                save=save, load=load,
+                params=dict(network=network))

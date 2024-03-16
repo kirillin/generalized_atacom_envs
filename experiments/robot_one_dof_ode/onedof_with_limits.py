@@ -26,7 +26,6 @@ class OneDof(Environment):
         # memory vars.
         self.x = np.zeros(2) # plant state
         self.target_theta = np.random.uniform(-np.pi, np.pi) # generate new targe
-        self.steps = 0
 
         # MDP parameters
         gamma = 0.97
@@ -35,17 +34,31 @@ class OneDof(Environment):
         
         # MDP properties
         high = np.array([1, 1, 1, 1, self._max_dq, 2, 2])
-        observation_space = spaces.Box(low=-high, high=high)
+        # observation_space = spaces.Box(low=-high, high=high)
+        observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(high.size,))
+        
         # observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(7,))
         action_space = spaces.Box(low=np.array([-self._max_u]),
                                   high=np.array([self._max_u]))
         mdp_info = MDPInfo(observation_space, action_space, gamma, horizon, dt)
 
+        super().__init__(mdp_info)
+
         # Visualization
         self._viewer = Viewer(5 * self._r, 5 * self._r)
         self._last_x = 0
 
-        super().__init__(mdp_info)
+        # memory.
+        self.sum = 0
+        self.count = 0        
+
+    def get_avg_dist(self):
+        if self.count > 0:
+            return self.sum / self.count
+        return np.inf
+    
+    def seed(self, seed):
+        np.random.seed(seed)
 
     def reset(self, state=None):
         self.x = np.array([-np.pi/8, 0]) # reset initial state of plant
@@ -55,6 +68,10 @@ class OneDof(Environment):
         self.x[1] = self.x[1] + np.random.uniform(low=-0.005, high=0.005)
 
         self.target_theta = np.random.uniform(-np.pi, np.pi) # generate new targe
+
+        # avg dist stuff
+        self.sum = 0
+        self.count = 0
 
         self._state = self._get_obs()
         return self._get_obs(), {}
@@ -82,6 +99,11 @@ class OneDof(Environment):
         reward_dist = -np.linalg.norm(vec)
         reward_ctrl = -np.square(action).sum()
         reward = reward_dist + reward_ctrl
+
+        # avg dist stuff
+        self.sum += -reward_dist
+        self.count += 1
+    
         return reward
 
     def _f(self, x):
@@ -174,19 +196,25 @@ class OneDof(Environment):
 def main():
     import time
     
-    onedof = OneDof()
-    onedof.reset(np.array([np.pi/2, 0]))
+    plant = OneDof()
+    plant.reset(np.array([np.pi/2, 0]))
 
+    t0 = time.time()
     while True:
+        t = time.time() - t0
+
         # step intergator
-        onedof.step(np.array([1]))
+        plant.step(np.array([1]))
 
-        onedof.render()
+        plant.render()
 
-        xy = onedof.fk(onedof._state[0])
-        q = onedof.ik(xy)
+        xy = plant.fk(plant._state[0])
+        q = plant.ik(xy)
 
         # print(f"IK: {q}, FK: {xy}")
+        if t > 2.:
+            t0 = time.time()
+            plant.reset()
 
 
 if __name__ == '__main__':

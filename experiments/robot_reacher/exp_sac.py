@@ -28,6 +28,7 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load, params):
     al, cl, af, cf = map(int, params['network'])
 
     run_name = f"reacher__a{al}_{af}_c{cl}_{cf}__{int(time.time())}"
+
     writer = SummaryWriter(f"runs/{run_name}")
     writer.add_text(
         "reacher_test",
@@ -35,7 +36,7 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load, params):
     )
     np.random.seed()
 
-    logger = Logger(alg.__name__, results_dir='./logs/reacher__a{al}_{af}_c{cl}_{cf}' if save else None)
+    logger = Logger(alg.__name__, results_dir=f'./logs/reacher__a{al}_{af}_c{cl}_{cf}' if save else None)
     logger.strong_line()
     logger.info('Experiment Algorithm: ' + alg.__name__)
 
@@ -44,11 +45,11 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load, params):
 
     # Settings
     initial_replay_size = af
-    max_replay_size = 50000
+    max_replay_size = 100000
     batch_size = af
     actor_n_features = [af] * al
     critic_n_features = [cf] * cl
-    warmup_transitions = 100
+    warmup_transitions = 1000
     tau = 0.002
     lr_alpha = 3e-4
 
@@ -110,10 +111,9 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load, params):
             J = np.mean(dataset.discounted_return)
             R = np.mean(dataset.undiscounted_return)
             E = agent.policy.entropy(dataset.state)
-
-            logger.epoch_info(n+1, J=J, R=R, entropy=E)
-
             avg_dist = core.env.get_avg_dist()
+
+            logger.epoch_info(n+1, J=J, R=R, entropy=E, avg_dist=avg_dist)
 
             writer.add_scalar("charts/discounted_return", J, n)
             writer.add_scalar("charts/undiscounted_return", R, n)
@@ -123,9 +123,9 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load, params):
             if save:
                 logger.log_best_agent(agent, J)
 
-        logger.info('Press a button to visualize pendulum')
-        input()
-        core.evaluate(n_episodes=5, render=True)
+        # logger.info('Press a button to visualize pendulum')
+        # input()
+        # core.evaluate(n_episodes=5, render=True)
     
     writer.close()
 
@@ -136,12 +136,12 @@ if __name__ == '__main__':
     parser.add_argument('-e', '--eval', action='store_true')
     args = parser.parse_args()
 
-    TorchUtils.set_default_device('cpu')
+    TorchUtils.set_default_device('cuda')
 
     robotfile = 'onedof.xml'
 
-    path = '/home/kika/path/iros2024/generalized_atacom_envs/experiments/robot_reacher/assests'
-    # path = '/home/human/artemov/generalized_atacom_envs/experiments/robot_reacher/assests'
+    # path = '/home/kika/path/iros2024/generalized_atacom_envs/experiments/robot_reacher/assests'
+    path = '/home/human/artemov/generalized_atacom_envs/experiments/robot_reacher/assests'
 
     xml_file = f'{path}/{robotfile}'
 
@@ -152,7 +152,10 @@ if __name__ == '__main__':
         [2,2,256,256],
         [3,3,256,256],
         [3,6,256,256],
-        [1,1,512,512]
+        [1,1,512,512],
+        [2,2,512,512],
+        [3,3,512,512],
+        [3,6,512,512],
     ]
 
     save = True
@@ -163,6 +166,6 @@ if __name__ == '__main__':
         load = True
 
     for network in networks:
-        experiment(alg=SAC, n_epochs=40, n_steps=1000, n_steps_test=1000, 
+        experiment(alg=SAC, n_epochs=200, n_steps=1000, n_steps_test=1000, 
                 save=save, load=load,
                 params=dict(xml_file=xml_file, network=network))
