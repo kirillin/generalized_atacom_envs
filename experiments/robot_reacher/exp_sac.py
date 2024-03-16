@@ -15,68 +15,60 @@ from twodof_mujoco import TwoDofMujoco
 from tqdm import trange
 
 
-class CriticNetwork(nn.Module):
+class SACCriticNetwork(nn.Module):
     def __init__(self, input_shape, output_shape, n_features, **kwargs):
         super().__init__()
 
         n_input = input_shape[-1]
         n_output = output_shape[0]
 
-        self._h1 = nn.Linear(n_input, n_features)
-        self._h2 = nn.Linear(n_features, n_features)
-        self._h22 = nn.Linear(n_features, n_features)
-        self._h222 = nn.Linear(n_features, n_features)
-        self._h3 = nn.Linear(n_features, n_output)
+        n_features = list(map(int, n_features))
+        n_features.insert(0, n_input)
+        n_features.append(n_output)
 
-        nn.init.xavier_uniform_(self._h1.weight,
-                                gain=nn.init.calculate_gain('relu'))
-        nn.init.xavier_uniform_(self._h2.weight,
-                                gain=nn.init.calculate_gain('relu'))
-        nn.init.xavier_uniform_(self._h22.weight,
-                                gain=nn.init.calculate_gain('relu'))
-        nn.init.xavier_uniform_(self._h222.weight,
-                                gain=nn.init.calculate_gain('relu'))
+        self.model = nn.Sequential()
+        for i in range(len(n_features[:-2])):
+            layer = nn.Linear(n_features[i], n_features[i + 1])
+            nn.init.xavier_uniform_(layer.weight,
+                                    gain=nn.init.calculate_gain('relu'))
+            self.model.append(layer)
+            self.model.append(nn.ReLU())
 
-        nn.init.xavier_uniform_(self._h3.weight,
-                                gain=nn.init.calculate_gain('linear'))
+        self.model.append(nn.Linear(n_features[-2], n_features[-1]))
+        nn.init.xavier_uniform_(
+            self.model[-1].weight, gain=nn.init.calculate_gain('linear'))
 
     def forward(self, state, action):
         state_action = torch.cat((state.float(), action.float()), dim=1)
-        features1 = F.relu(self._h1(state_action))
-        features2 = F.relu(self._h2(features1))
-
-        features2 = F.relu(self._h22(features2))
-        features2 = F.relu(self._h222(features2))
-
-        q = self._h3(features2)
-
+        q = self.model(state_action)
         return torch.squeeze(q)
 
 
-class ActorNetwork(nn.Module):
+class SACActorNetwork(nn.Module):
     def __init__(self, input_shape, output_shape, n_features, **kwargs):
-        super(ActorNetwork, self).__init__()
+        super(SACActorNetwork, self).__init__()
 
         n_input = input_shape[-1]
         n_output = output_shape[0]
 
-        self._h1 = nn.Linear(n_input, n_features)
-        self._h2 = nn.Linear(n_features, n_features)
-        self._h3 = nn.Linear(n_features, n_output)
+        n_features = list(map(int, n_features))
+        n_features.insert(0, n_input)
+        n_features.append(n_output)
 
-        nn.init.xavier_uniform_(self._h1.weight,
-                                gain=nn.init.calculate_gain('relu'))
-        nn.init.xavier_uniform_(self._h2.weight,
-                                gain=nn.init.calculate_gain('relu'))
-        nn.init.xavier_uniform_(self._h3.weight,
+        self.model = nn.Sequential()
+        for i in range(len(n_features[:-2])):
+            layer = nn.Linear(n_features[i], n_features[i + 1])
+            nn.init.xavier_uniform_(layer.weight,
+                                    gain=nn.init.calculate_gain('relu'))
+            self.model.append(layer)
+            self.model.append(nn.ReLU())
+
+        self.model.append(nn.Linear(n_features[-2], n_features[-1]))
+        nn.init.xavier_uniform_(self.model[-1].weight,
                                 gain=nn.init.calculate_gain('linear'))
 
-    def forward(self, state):
-        features1 = F.relu(self._h1(torch.squeeze(state, 1).float()))
-        features2 = F.relu(self._h2(features1))
-        a = self._h3(features2)
-
-        return a
+    def forward(self, state, **kwargs):
+        return self.model(torch.squeeze(state, 1).float())
 
 
 def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
@@ -95,9 +87,9 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
     initial_replay_size = 256
     max_replay_size = 50000
     batch_size = 256
-    n_features = 256
+    n_features = [256,256,256]
     warmup_transitions = 100
-    tau = 0.005
+    tau = 0.002
     lr_alpha = 3e-4
 
     if load:
@@ -105,11 +97,11 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
     else:
         # Approximator
         actor_input_shape = mdp.info.observation_space.shape
-        actor_mu_params = dict(network=ActorNetwork,
+        actor_mu_params = dict(network=SACActorNetwork,
                                n_features=n_features,
                                input_shape=actor_input_shape,
                                output_shape=mdp.info.action_space.shape)
-        actor_sigma_params = dict(network=ActorNetwork,
+        actor_sigma_params = dict(network=SACActorNetwork,
                                   n_features=n_features,
                                   input_shape=actor_input_shape,
                                   output_shape=mdp.info.action_space.shape)
@@ -118,7 +110,7 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load):
                            'params': {'lr': 3e-4}}
 
         critic_input_shape = (actor_input_shape[0] + mdp.info.action_space.shape[0],)
-        critic_params = dict(network=CriticNetwork,
+        critic_params = dict(network=SACCriticNetwork,
                              optimizer={'class': optim.Adam,
                                         'params': {'lr': 1e-4}},
                              loss=F.mse_loss,

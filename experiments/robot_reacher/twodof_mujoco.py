@@ -8,7 +8,13 @@ from mushroom_rl.utils.mujoco import MujocoViewer
 
 
 class TwoDofMujoco(Environment):
+    """
+        state \in R^{4} = [q1, q2, x_target, y_target dq1, dq2, dx_target, dy_target]
+            where q -- robot, x_target,y_target -- target 
 
+        observation \in R^{8} = [q1, q2, x_tcp, y_tcp, dq1, dq2, (x_tcp - x_target), (y_tcp - y_target)]
+
+    """
     def __init__(self, xml_file, gamma=0.99, horizon=300, dt=1e-2, timestep=None, n_substeps=1, n_intermediate_steps=1):
         # Create the simulation
         self._model = mujoco.MjModel.from_xml_path(xml_file)
@@ -70,7 +76,10 @@ class TwoDofMujoco(Environment):
     def reset(self, state=None):
         
         # set initial state
-        self.x = np.zeros(8)
+        if state == None:
+            self.x = np.zeros(8)
+        else:
+            self.x = state
 
         # Add noise to state
         self.x[0] = self.x[0] + np.random.uniform(low=-0.1, high=0.1) # position noise
