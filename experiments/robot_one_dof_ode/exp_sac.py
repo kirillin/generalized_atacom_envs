@@ -52,7 +52,11 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load, params):
     lr_alpha = 3e-4
 
     if load:
-        agent = SAC.load('logs/SAC/agent-best.msh')
+        try:
+            agent = SAC.load(f'logs/onedof__a{al}_{af}_c{cl}_{cf}/SAC/agent-best.msh')
+        except:
+            print(f"no logs for 'logs/onedof__a{al}_{af}_c{cl}_{cf}/SAC/agent-best.msh'")
+            exit(0)
     else:
         # Approximator
         actor_input_shape = mdp.info.observation_space.shape
@@ -132,30 +136,39 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-l', '--learn', action='store_true')
     parser.add_argument('-e', '--eval', action='store_true')
+    parser.add_argument('-n', '--network', default='1,1,256,256')
     args = parser.parse_args()
 
     TorchUtils.set_default_device('cuda')
 
-    # actor critic
-    networks = [
-        [1,1,256,256],
-        [2,2,256,256],
-        [3,3,256,256],
-        [3,6,256,256],
-        [1,1,512,512],
-        [2,2,512,512],
-        [3,3,512,512],
-        [3,6,512,512],
-    ]
+    if args.learn:
+        # actor critic
+        networks = [
+            [1,1,256,256],
+            [2,2,256,256],
+            [3,3,256,256],
+            [3,6,256,256],
+            [1,1,512,512],
+            [2,2,512,512],
+            [3,3,512,512],
+            [3,6,512,512],
+        ]
 
-    save = True
-    load = False
+        save = True
+        load = False
+
+
+
+        for network in networks:
+            experiment(alg=SAC, n_epochs=200, n_steps=1000, n_steps_test=1000, 
+                    save=save, load=load,
+                    params=dict(xml_file='', network=network))
 
     if args.eval:
         save = False
         load = True
+        network = list(map(int,args.network.split()))
 
-    for network in networks:
-        experiment(alg=SAC, n_epochs=100, n_steps=1000, n_steps_test=1000, 
+        experiment(alg=SAC, n_epochs=200, n_steps=1000, n_steps_test=1000, 
                 save=save, load=load,
-                params=dict(network=network))
+                params=dict(xml_file='', network=network))     
