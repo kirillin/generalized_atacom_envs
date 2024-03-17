@@ -19,8 +19,8 @@ from torch.utils.tensorboard import SummaryWriter
 # from nn import SimpleActorNetwork as ActorNetwork
 # from nn import SimpleCriticNetwork as CriticNetwork
 
-from nn import SACActorNetwork as ActorNetwork
-from nn import SACCriticNetwork as CriticNetwork
+from atacom.nn import SACActorNetwork as ActorNetwork
+from atacom.nn import SACCriticNetwork as CriticNetwork
 
 
 def experiment(alg, n_epochs, n_steps, n_steps_test, save, load, params):

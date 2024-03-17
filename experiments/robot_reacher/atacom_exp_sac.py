@@ -14,32 +14,8 @@ from torch.utils.tensorboard import SummaryWriter
 
 from atacom.builders import mdp_builder, agent_builder
 
-def experiment(alg, n_epochs, n_steps, n_steps_test, save, load, params):
+def experiment(alg, number_epochs, number_learn_iterations, number_evaluation_iterations, save, load, training_config):
     np.random.seed()
-
-    training_config = {
-        "id": 'reacher',
-        "number_epochs": 100,
-        "number_learn_iterations": 1000,
-        "number_evaluation_iterations": 1000,
-        "agent_config": {
-            # SAC
-            "initial_replay_size": 256,
-            "max_replay_size": 100000,
-            "warmup_transitions": 1000,
-            "learning_rate_actor": 3e-4,
-            "learning_rate_critic": 1e-4,
-            "learning_rate_alpha": 0.005,
-            "batch_size": 256,
-            "tau": 0.0025,
-            "actor_structure": [256] * 3,
-            "critic_structure": [256] * 3,
-        },
-        "env_config": {
-            # mujoco
-            "xmlfile" : xml_file
-        }
-    }
 
     run_name = f"{training_config['id']}__a{'_'.join(list(map(str,training_config['agent_config']['actor_structure'])))}__c{'_'.join(list(map(str,training_config['agent_config']['critic_structure'])))}"
 
@@ -61,9 +37,6 @@ def experiment(alg, n_epochs, n_steps, n_steps_test, save, load, params):
     core = Core(agent, env)
 
     # Run learn or evaluate
-    number_epochs = training_config['number_epochs']
-    number_learn_iterations = training_config['number_learn_iterations']
-    number_evaluation_iterations = training_config['number_evaluation_iterations']
     initial_replay_size = training_config['agent_config']['initial_replay_size']
 
     if load:
@@ -116,36 +89,123 @@ if __name__ == '__main__':
 
     TorchUtils.set_default_device('cpu')
 
-    robotfile = 'onedof.xml'
+    robotfile = 'twodof.xml'
 
-    path = '/home/kika/path/iros2024/generalized_atacom_envs/experiments/robot_reacher/assests'
-    # path = '/home/human/artemov/generalized_atacom_envs/experiments/robot_reacher/assests'
+    # path = '/home/kika/path/iros2024/generalized_atacom_envs/experiments/robot_reacher/assests'
+    path = '/home/human/artemov/generalized_atacom_envs/experiments/robot_reacher/assests'
 
     xml_file = f'{path}/{robotfile}'
 
 
+    training_configs = [
+        # {
+        #     "id": 'reacher',
+        #     "number_epochs": 100,
+        #     "number_learn_iterations": 1000,
+        #     "number_evaluation_iterations": 1000,
+        #     "agent_config": {
+        #         # SAC
+        #         "initial_replay_size": 256,
+        #         "max_replay_size": 100000,
+        #         "warmup_transitions": 1000,
+        #         "learning_rate_actor": 3e-4,
+        #         "learning_rate_critic": 1e-4,
+        #         "learning_rate_alpha": 0.005,
+        #         "batch_size": 256,
+        #         "tau": 0.0025,
+        #         "actor_structure": [256] * 3,
+        #         "critic_structure": [256] * 3,
+        #     },
+        #     "env_config": {
+        #         # mujoco
+        #         "xmlfile" : xml_file
+        #     }
+        # },
+        {
+            "id": 'reacher_lr_1e_3_tau0025',
+            "number_epochs": 100,
+            "number_learn_iterations": 1000,
+            "number_evaluation_iterations": 1000,
+            "agent_config": {
+                # SAC
+                "initial_replay_size": 256,
+                "max_replay_size": 256*1000,
+                "warmup_transitions": 256*4,
+                "learning_rate_actor": 3e-3,
+                "learning_rate_critic": 1e-3,
+                "learning_rate_alpha": 0.005,
+                "batch_size": 256,
+                "tau": 0.0025,
+                "actor_structure": [256] * 3,
+                "critic_structure": [256] * 3,
+            },
+            "env_config": {
+                # mujoco
+                "xmlfile" : xml_file
+            }
+        },
+        {
+            "id": 'reacher_lr_1e_3_tau001',
+            "number_epochs": 100,
+            "number_learn_iterations": 1000,
+            "number_evaluation_iterations": 1000,
+            "agent_config": {
+                # SAC
+                "initial_replay_size": 256,
+                "max_replay_size": 256*1000,
+                "warmup_transitions": 256*4,
+                "learning_rate_actor": 3e-3,
+                "learning_rate_critic": 1e-3,
+                "learning_rate_alpha": 0.005,
+                "batch_size": 256,
+                "tau": 0.001,
+                "actor_structure": [256] * 3,
+                "critic_structure": [256] * 3,
+            },
+            "env_config": {
+                # mujoco
+                "xmlfile" : xml_file
+            }
+        },
+        {
+            "id": 'reacher_lr_1e_3_tau001_alpha001',
+            "number_epochs": 100,
+            "number_learn_iterations": 1000,
+            "number_evaluation_iterations": 1000,
+            "agent_config": {
+                # SAC
+                "initial_replay_size": 256,
+                "max_replay_size": 256*1000,
+                "warmup_transitions": 256*4,
+                "learning_rate_actor": 3e-3,
+                "learning_rate_critic": 1e-3,
+                "learning_rate_alpha": 0.001,
+                "batch_size": 256,
+                "tau": 0.001,
+                "actor_structure": [256] * 3,
+                "critic_structure": [256] * 3,
+            },
+            "env_config": {
+                # mujoco
+                "xmlfile" : xml_file
+            }
+        },        
+    ]
+
     if args.learn:
-        # actor critic
-        networks = [
-            [1,1,256,256],
-            [2,2,256,256],
-            [3,3,256,256],
-            [3,6,256,256],
-            [1,1,512,512],
-            [2,2,512,512],
-            [3,3,512,512],
-            [3,6,512,512],
-        ]
 
         save = True
         load = False
 
 
-
-        for network in networks:
-            experiment(alg=SAC, n_epochs=200, n_steps=1000, n_steps_test=1000, 
-                    save=save, load=load,
-                    params=dict(xml_file=xml_file, network=network))
+        for training_config in training_configs:
+            number_epochs = training_config['number_epochs']
+            number_learn_iterations = training_config['number_learn_iterations']
+            number_evaluation_iterations = training_config['number_evaluation_iterations']            
+            
+            experiment(alg=SAC, n_epochs=number_epochs, n_steps=number_learn_iterations, n_steps_test=number_evaluation_iterations, 
+                        save=save, load=load,
+                        training_config=training_config)
 
     if args.eval:
         save = False
@@ -154,4 +214,4 @@ if __name__ == '__main__':
 
         experiment(alg=SAC, n_epochs=200, n_steps=1000, n_steps_test=1000, 
                 save=save, load=load,
-                params=dict(xml_file=xml_file, network=network))        
+                training_config=training_config[0])        
